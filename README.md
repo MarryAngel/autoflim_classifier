@@ -1,2 +1,1 @@
-# flim_classification
-FLIM-based convolutional encoder for enteroparasite classification
+# FLIM-based convolutional encoder
