@@ -1,1 +1,47 @@
+# Git ignore configuration
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Dataset images (keep structure only)
+# baselines_networks/datasets/*/images/*.png
+# baselines_networks/datasets/*/images/*.jpg
+# baselines_networks/datasets/*/label/*.png
+# baselines_networks/datasets/*/label/*.jpg
+
+# Ignora tudo dentro das pastas de imagens
+baselines_networks/datasets/**/images/*
+baselines_networks/datasets/**/masks/*
+
+# Mas não ignora as próprias pastas "images" (mantém a estrutura)
+!baselines_networks/datasets/**/images/
+!baselines_networks/datasets/**/masks/
+
+# IDE
+.vscode/
+
+# .idea/
+# *.swp
+# *.swo
+
+# # OS
+# .DS_Store
+# Thumbs.db
+
+# # Results and outputs
+# *.log
+# results/
+# outputs/
+# checkpoints/
