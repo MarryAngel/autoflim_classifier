@@ -16,13 +16,13 @@ ENV/
 *.ipynb_checkpoints/
 
 # Ignora todas as imagens nas pastas de datasets
-baselines_networks/datasets/**/images/*
+baseline_networks/datasets/**/images/*
 
-# Exceto a imagem de exemplo usada como referência
-!baselines_networks/datasets/**/images/000001_00000001.png
+# # Exceto a imagem de exemplo usada como referência
+# !baselines_networks/datasets/**/images/000001_00000001.png
 
-# Mantém a pasta "images" no repositório
-!baselines_networks/datasets/**/images/
+# # Mantém a pasta "images" no repositório
+# !baselines_networks/datasets/**/images/
 
 # IDE
 .vscode/
