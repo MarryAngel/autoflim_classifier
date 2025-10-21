@@ -22,12 +22,12 @@ ENV/
 # baselines_networks/datasets/*/label/*.jpg
 
 # Ignora tudo dentro das pastas de imagens
-baselines_networks/datasets/**/images/*
-baselines_networks/datasets/**/masks/*
+baselines_networks/datasets/cistos/images/*
+baselines_networks/datasets/cistos/masks/*
 
 # Mas não ignora as próprias pastas "images" (mantém a estrutura)
-!baselines_networks/datasets/**/images/
-!baselines_networks/datasets/**/masks/
+!baselines_networks/datasets/cistos/images/
+!baselines_networks/datasets/cistos/masks/
 
 # IDE
 .vscode/
