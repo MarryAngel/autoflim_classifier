@@ -1,0 +1,9 @@
+
+#ifndef IMAGO_HELPER_H
+#define IMAGO_HELPER_H
+
+#include <QImage>
+
+bool saveImage(QWidget *parent,   QImage &image,   QString &file_ext = "png");
+
+#endif //IMAGO_HELPER_H

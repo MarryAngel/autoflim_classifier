@@ -1,0 +1,52 @@
+
+set(PW_SRCS
+        PINK/larith.c
+        src/ccsort.c
+        src/cccodimage.c
+        src/gageodesic.c
+        PINK/mccodimage.c
+        PINK/mcimage.c
+        PINK/mcindic.c
+        PINK/mclifo.c
+        src/random_walker.c
+        src/lMSF.c
+        src/MSF_RW.c
+        PINK/mcrbt.c
+        src/union_find.c
+        src/image_toolbox.c
+        CSparse/Source/cs_lu.c
+        CSparse/Source/cs_lusol.c
+        CSparse/Source/cs_malloc.c
+        CSparse/Source/cs_util.c
+        CSparse/Source/cs_multiply.c
+        CSparse/Source/cs_compress.c
+        CSparse/Source/cs_lsolve.c
+        CSparse/Source/cs_scatter.c
+        CSparse/Source/cs_cumsum.c
+        CSparse/Source/cs_sqr.c
+        CSparse/Source/cs_ipvec.c
+        CSparse/Source/cs_amd.c
+        CSparse/Source/cs_permute.c
+        CSparse/Source/cs_transpose.c
+        CSparse/Source/cs_counts.c
+        CSparse/Source/cs_add.c
+        CSparse/Source/cs_etree.c
+        CSparse/Source/cs_leaf.c
+        CSparse/Source/cs_fkeep.c
+        CSparse/Source/cs_tdfs.c
+        CSparse/Source/cs_usolve.c
+        CSparse/Source/cs_spsolve.c
+        CSparse/Source/cs_post.c
+        CSparse/Source/cs_reach.c
+        CSparse/Source/cs_dfs.c
+        argv/argv.c
+        CSparse/Source/cs_print.c
+        CSparse/Source/cs_norm.c)
+
+add_library(powerwatershed ${PW_SRCS})
+
+target_include_directories(powerwatershed PRIVATE
+        include
+        argv
+        CSparse/Include
+        PINK)

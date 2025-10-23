@@ -1,0 +1,223 @@
+#include <random>
+
+//#include <QtCharts/QChartView>
+#include <QThread>
+//#include <QScatterSeries>
+
+#include "datatypes/image.h"
+#include "metriclearn/neighborcompanalysis.h"
+#include "metriclearn/largemargin.h"
+
+#include "metriclearnwindow.h"
+#include "ui_metriclearnwindow.h"
+
+//using namespace QtCharts;
+
+MetricLearnWindow::MetricLearnWindow(QWidget *parent) :
+    QWidget(parent, Qt::Tool),
+    ui(new Ui::MetricLearnWindow)
+{
+    ui->setupUi(this);
+    show();
+
+    scene = new QGraphicsScene(this);
+    ui->plotView->setScene(scene);
+    ui->plotView->setOptimizationFlags(QGraphicsView::DontAdjustForAntialiasing);
+    ui->plotView->setOptimizationFlags(QGraphicsView::DontSavePainterState);
+}
+
+
+void MetricLearnWindow::getImageData()
+{
+    segm::Image<float> image = annoArea->getFeatImg();
+    segm::Image<int> label = annoArea->getLabel();
+    segm::Image<int> markers = annoArea->getMarkerImage();
+    loadData(image, label, markers);
+
+    setUiBoxes();
+}
+
+
+void MetricLearnWindow::plotPixels()
+{
+    L_data = engine.transform(data);
+    plot(L_data, data_label, true);
+}
+
+
+void MetricLearnWindow::plotMarkers()
+{
+    MatrixXd L_train = engine.transform(train);
+    plot(L_train, train_label, true);
+}
+
+
+void MetricLearnWindow::run()
+{
+    if (!dataLoaded)
+        return;
+
+    engine.setParam(&train, &train_label, dim_out, k_targets, iterations, learn_rate);
+    auto thread = new QThread(this);
+    engine.moveToThread(thread);
+
+    /* lock buttons */
+    connect(thread, &QThread::started, this, &MetricLearnWindow::disableButtons);
+
+    connect(thread, &QThread::started, &engine, &MetricLearnEngine::train);
+    connect(&engine, &MetricLearnEngine::trained, thread, &QThread::quit);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+    /* unlock buttons */
+    connect(thread, &QThread::finished, this, &MetricLearnWindow::enableButtons);
+
+    thread->start();
+}
+
+
+void MetricLearnWindow::disableButtons()
+{
+    bool status = false;
+    ui->convImgButton->setEnabled(status);
+    ui->dimOutSpinBox->setEnabled(status);
+    ui->iteSpinBox->setEnabled(status);
+    ui->learnRateSpinBox->setEnabled(status);
+    ui->imageDataButton->setEnabled(status);
+    ui->methodComboBox->setEnabled(status);
+    ui->runButton->setEnabled(status);
+    ui->kernelComboBox->setEnabled(status);
+    ui->nNeighSpinBox->setEnabled(status);
+    ui->param1SpinBox->setEnabled(status);
+    ui->param2SpinBox->setEnabled(status);
+    ui->imgLabelButton->setEnabled(status);
+    ui->plotPixelsButton->setEnabled(status);
+    ui->plotMarkersButton->setEnabled(status);
+    ui->send2SegmButton->setEnabled(status);
+}
+
+
+void MetricLearnWindow::enableButtons()
+{
+    bool status = true;
+    ui->convImgButton->setEnabled(status);
+    ui->dimOutSpinBox->setEnabled(status);
+    ui->iteSpinBox->setEnabled(status);
+    ui->learnRateSpinBox->setEnabled(status);
+    ui->imageDataButton->setEnabled(status);
+    ui->methodComboBox->setEnabled(status);
+    ui->runButton->setEnabled(status);
+    ui->kernelComboBox->setEnabled(status);
+    ui->nNeighSpinBox->setEnabled(status);
+    ui->param1SpinBox->setEnabled(status);
+    ui->param2SpinBox->setEnabled(status);
+    ui->imgLabelButton->setEnabled(status);
+    ui->plotPixelsButton->setEnabled(status);
+    ui->plotMarkersButton->setEnabled(status);
+    ui->send2SegmButton->setEnabled(status);
+}
+
+
+void MetricLearnWindow::setUiBoxes()
+{
+    ui->iteSpinBox->setRange(0, 100000);
+    ui->iteSpinBox->setValue(1000);
+    ui->iteSpinBox->setSingleStep(10);
+    iterations = ui->iteSpinBox->value();
+
+    ui->dimOutSpinBox->setRange(1, static_cast<int>(train.cols()));
+    ui->dimOutSpinBox->setValue(static_cast<int>(train.cols()));
+    ui->dimOutSpinBox->setSingleStep(1);
+    dim_out = ui->dimOutSpinBox->value();
+
+    ui->learnRateSpinBox->setRange(1e-23, 1);
+    ui->learnRateSpinBox->setSingleStep(1e-22); // FIXME remove this
+    ui->learnRateSpinBox->setValue(1e-5);
+    learn_rate = ui->learnRateSpinBox->value();
+    // TODO
+    //  - pensar como será incrementado o learning rate
+
+    k_targets = ui->nNeighSpinBox->value();
+    // TODO
+    //  - adicionar itens do kernel
+}
+
+void MetricLearnWindow::loadData(  segm::Image<float> &image,   segm::Image<int> &label,
+                                   segm::Image<int> &markers)
+{
+    colors = annoArea->getColorTable();
+
+    data = Eigen::MatrixXd(image.getWidth() * image.getHeight(), image.getBands());
+    data_label = Eigen::VectorXi(label.getWidth() * label.getHeight());
+
+    for (int i = 0, p = 0; i < image.getHeight(); i++) {
+        for (int j = 0; j < image.getWidth(); j++, p++) {
+            for (int b = 0; b < image.getBands(); b++) {
+                data(p, b) = image(i, j, b);
+            }
+            data(p) = label(i, j);
+        }
+    }
+
+    int n_train = 0;
+    for (int p = 0; p < markers.getHeight() * markers.getHeight(); p++)
+        if (markers(p) >= 0) n_train++;
+
+    train = Eigen::MatrixXd(n_train, image.getBands());
+    train_label = Eigen::VectorXi(n_train);
+
+    for (int i = 0, p = 0; i < image.getHeight(); i++) {
+        for (int j = 0; j < image.getWidth(); j++) {
+            if (markers(i, j) >= 0) {
+                for (int b = 0; b < image.getBands(); b++) {
+                    train(p, b) = image(i, j, b);
+                }
+                train_label(p) = markers(i, j);
+                p++;
+            }
+        }
+    }
+
+    dataLoaded = true;
+}
+
+
+void MetricLearnWindow::plot(  Eigen::MatrixXd &data,   Eigen::VectorXi &label, bool increment)
+{
+//    if (!dataLoaded)
+//        return;
+//
+//    scene->clear();
+//
+//    std::random_device rd{};
+//    std::mt19937 gen{rd()};
+//    std::normal_distribution<> d{0, 0.5};
+//
+//    auto chart = new QChart;
+//    chart->setMinimumSize(ui->plotView->size());
+//
+//    QVector<QScatterSeries*> series;
+//
+//    for (auto c : colors) {
+//        auto *points = new QScatterSeries(chart);
+//        QColor col(c);
+//        col.setAlphaF(0.4);
+//        points->setColor(col);
+//        points->setBorderColor(col);
+//        points->setMarkerSize(10.0);
+//        series.append(points);
+//    }
+//
+//    for (int i = 0; i < data.rows(); i++) {
+//        int lb = label[i] + increment;
+//        if (data.cols() > 1)
+//            (*series[lb]) << QPointF(data(i, 0), data(i, 1));
+//        else
+//            (*series[lb]) << QPointF(data(i, 0), d(gen)); // jitter to avoid overlap
+//    }
+//
+//    for (int i = 0; i < colors.size(); i++) {
+//        chart->addSeries(series[i]);
+//    }
+//
+//    scene->addItem(chart);
+}

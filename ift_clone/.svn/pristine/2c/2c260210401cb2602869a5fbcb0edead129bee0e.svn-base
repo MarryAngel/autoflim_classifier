@@ -1,0 +1,82 @@
+#include "metriclearnengine.h"
+
+#include <QApplication>
+
+MetricLearnEngine::MetricLearnEngine() :
+        QObject()
+{
+
+}
+
+
+MetricLearnEngine::~MetricLearnEngine()
+{
+    reset();
+}
+
+
+void MetricLearnEngine::setParam(MatrixXd *_data, VectorXi *_label, int _out_dim, int _k_targets, int _iterations, double _learn_rate)
+{
+    data = _data;
+    label = _label;
+    out_dim = _out_dim;
+    k_targets = _k_targets;
+    iterations = _iterations;
+    learn_rate = _learn_rate;
+    modified = false;
+}
+
+
+void MetricLearnEngine::reset()
+{
+    delete lm;
+    delete nca;
+
+    modified = false;
+    executed = false;
+}
+
+
+void MetricLearnEngine::train()
+{
+    if (modified) {
+        // TODO send message to user
+        return;
+    }
+
+    if (method == "Kernel Large Margin") {
+        // TODO ...
+    } else if (method == "Large Margin") {
+        delete lm;
+        lm = new segm::LargeMargin(*data, *label, out_dim, k_targets, 100000, iterations, learn_rate, true);
+        lm->train();
+    } else if (method == "Neigh. Comp. Analysis") {
+        nca = new segm::NeighborCompAnalysis(*data, *label, out_dim, iterations, learn_rate);
+        nca->train();
+    } else {
+        throw std::invalid_argument("Invalid method in, MetricLearnEngine::transform");
+    }
+
+    executed = true;
+    moveToThread(qApp->thread());
+    emit trained();
+}
+
+
+MatrixXd MetricLearnEngine::transform(MatrixXd &input)
+{
+    if (!executed)
+        return MatrixXd();
+
+    if (method == "Kernel Large Margin") {
+        // TODO ...
+    } else if (method == "Large Margin") {
+        return lm->transform(input);
+    } else if (method == "Neigh. Comp. Analysis") {
+        return nca->transform(input);
+    } else {
+        throw std::invalid_argument("Invalid method in, MetricLearnEngine::transform");
+    }
+
+    return MatrixXd();
+}

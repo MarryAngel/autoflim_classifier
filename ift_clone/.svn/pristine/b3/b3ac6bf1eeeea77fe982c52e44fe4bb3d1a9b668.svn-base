@@ -1,0 +1,53 @@
+
+#ifndef IMAGO_IFTQTAPI_H
+#define IMAGO_IFTQTAPI_H
+
+#include <QImage>
+#include <cmath>
+
+#include "datatypes/image.h"
+
+QImage segmImageToQImage(  segm::Image<int> &input, QVector<QRgb> &markerColors, bool increment);
+
+QImage segmImageToQImage(  segm::Image<int> &input);
+
+QImage segmImageToQImage(  segm::Image<float> &input, int normalization = 255);
+
+QImage segmImageToHeatMap(  segm::Image<int> &input);
+
+segm::Image<int> QImageToSegmImage(  QImage &input, bool decrement);
+
+segm::Image<float> QImageToSegmImage(  QImage &input);
+
+segm::Image<int> propagateLabel(  segm::Image<int> &label,   segm::Image<int> &sup);
+
+void QImageSetAlpha(  segm::Image<int> &contour, QImage &image);
+
+template<typename T>
+segm::Image<T> segmImageLog10(  segm::Image<T> &input)
+{
+    segm::Image<T> output(input.getWidth(), input.getHeight(), input.getBands());
+
+    int n = output.getWidth() * output.getHeight() * output.getBands();
+    for (int p = 0; p < n; p++) {
+        output(p) = log10(input(p) * 100 + 1);
+    }
+
+    return output;
+}
+
+template<typename T>
+segm::Image<T> segmImageSqrt(  segm::Image<T> &input)
+{
+    segm::Image<T> output(input.getWidth(), input.getHeight(), input.getBands());
+
+    int n = output.getWidth() * output.getHeight() * output.getBands();
+    for (int p = 0; p < n; p++) {
+        output(p) = sqrt(input(p));
+    }
+
+    return output;
+}
+
+
+#endif //IMAGO_IFTQTAPI_H

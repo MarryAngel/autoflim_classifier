@@ -1,0 +1,96 @@
+
+#include "pwqtapi.h"
+#include <cmath>
+
+uint32_t * segmToPWWeights(  segm::Image<float> &image, uint32_t * weights, int ** edges, int size_edges,
+                           int * seeds, int size_seeds, uint32_t * maxi, bool quicksort)
+{
+    auto * normal_weights = new uint32_t[size_edges];
+
+    for (int i = 0; i < size_edges; i++)
+    {
+        weights[i] = std::numeric_limits<int>::max();
+        float *f1 = image.getFeats(edges[0][i]);
+        float *f2 = image.getFeats(edges[1][i]);
+        for (int b = 0; b < image.getBands(); b++) {
+            auto w = (uint32_t) (fabsf(f1[b] - f2[b]) * 255 - 255);
+            if (w < weights[i])
+                weights[i] = w;
+        }
+    }
+
+    for (int i = 0; i < size_edges; i++)
+        normal_weights[i] = weights[i];
+
+    auto * seeds_function = new uint32_t[size_edges]();
+
+    int numvoisins = 4;
+
+    for (int i = 0; i < size_seeds; i++) {
+        for (int j = 1; j <= numvoisins; j++) {
+            int n = neighbor_node_edge(seeds[i], j, image.getWidth(), image.getHeight(), 1);
+            if (n != -1)
+                seeds_function[n] = normal_weights[n];
+        }
+    }
+
+    *maxi = 255;
+    gageodilate_union_find(seeds_function, normal_weights, weights, edges,
+                           image.getWidth(), image.getHeight(), 1, *maxi, quicksort);
+    free(seeds_function);
+
+
+    return normal_weights;
+}
+
+
+segm::Image<int> powerWatershed(  segm::Image<float> &image,   segm::Image<int> &markers)
+{
+    int n = image.getWidth() * image.getHeight();
+    int n_edges = image.getWidth() * (image.getHeight() - 1) + (image.getWidth() - 1) * image.getHeight();
+
+    auto **edges = new int*[2];
+    edges[0] = new int[n_edges];
+    edges[1] = new int[n_edges];
+
+    compute_edges(edges, image.getWidth(), image.getHeight(), 1);
+
+    auto *index_seeds = new int[n];
+    auto *index_labels = new uint8_t[n];
+    int label = 0;
+    for (int i = 0; i < n; i++) {
+        if (markers(i) >= 0) {
+            index_seeds[label + 1] = i;
+            index_labels[label + 1] = (uint8_t) markers(i);
+            label++;
+        }
+    }
+    int size_seeds = label;
+    int n_labels = markers(markers.argmax());
+
+    auto *weights = new uint32_t[n_edges];
+    uint32_t *normal_weights;
+    uint32_t max_weight = 255;
+    normal_weights = segmToPWWeights(image, weights, edges, n_edges, index_seeds, size_seeds, &max_weight, false);
+
+    bool quicksort = true;
+    struct xvimage * img_proba = nullptr;
+    struct xvimage * output = PowerWatershed_q2(edges, weights, weights, max_weight, index_seeds, index_labels, size_seeds,
+                                                image.getWidth(), image.getHeight(), 1, n_labels, quicksort, img_proba);
+
+    uint8_t *data = UCHARDATA(output);
+    segm::Image<int> res(image.getWidth(), image.getHeight());
+    for (int i = 0; i < res.getWidth() * res.getHeight(); i++)
+        res(i) = (int) data[i];
+
+    delete[] edges[0];
+    delete[] edges[1];
+    delete[] edges;
+    delete[] index_seeds;
+    delete[] index_labels;
+    delete[] weights;
+    delete[] normal_weights;
+    freeimage(output);
+
+    return res;
+}

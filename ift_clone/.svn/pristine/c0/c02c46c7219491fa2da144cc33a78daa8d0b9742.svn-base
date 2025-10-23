@@ -1,0 +1,18 @@
+
+#include "helper.h"
+
+#include <QFileDialog>
+
+bool saveImage(QWidget *parent,   QImage &image,   QString &file_ext)
+{
+    QString initFilePath = QDir::currentPath() + "/untitled." + file_ext;
+
+    QString fileName = QFileDialog::getSaveFileName(parent, parent->tr("Save As"),
+                                                initFilePath, parent->tr("Image (*.png *.ppm *.pgm *.jpg *.jpeg)"));
+
+    if (fileName.isEmpty())
+        return false;
+
+    image.save(fileName);
+    return true;
+}

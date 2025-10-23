@@ -1,0 +1,53 @@
+#ifndef IMAGO_MAINWINDOW_H
+#define IMAGO_MAINWINDOW_H
+
+#include <QAction>
+#include <QMainWindow>
+#include <QUndoStack>
+
+namespace Ui {
+class MainWindow;
+}
+
+class AuxiliaryWindow;
+
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    explicit MainWindow(  QStringList &args = {}, QWidget *parent = nullptr);
+    ~MainWindow() override;
+
+private slots:
+    void loadImage();
+
+    void loadDir();
+    bool saveDir();
+
+    void loadMarkers();
+    bool saveMarkers();
+
+    void updateMarkerColor();
+    void addMarker();
+    void updateMarker(int index);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private:
+    Ui::MainWindow *ui;
+    QUndoStack *undoStack;
+    // terminar de adicionar undo e redo, actions já criadas no .ui
+    // http://doc.qt.io/qt-5/qtwidgets-tools-undoframework-example.html
+    QString current_dir;
+
+    bool maybeSave();
+    void updateMarker();
+
+    void setMarkerBoxColor(  QColor &col);
+
+    QString getDirectory(  QString &fileName);
+};
+
+#endif // IMAGO_MAINWINDOW_H

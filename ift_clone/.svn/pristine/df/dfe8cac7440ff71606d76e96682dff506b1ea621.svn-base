@@ -1,0 +1,8 @@
+
+set(MAXFLOW_SRCS
+        block.h
+        graph.cpp
+        graph.h
+        maxflow.cpp)
+
+add_library(maxflow ${MAXFLOW_SRCS})

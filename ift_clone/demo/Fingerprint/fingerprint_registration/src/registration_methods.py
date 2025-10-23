@@ -1,0 +1,516 @@
+from itertools import combinations
+from random import shuffle
+
+import numpy as np
+from utils import _plot_rotation_histogram, _plot_translation_histogram
+from utils import read_match_list
+
+DEBUG = False
+
+class MaxIterReached(Exception):
+    "Raised when reaches max number of iterations"
+    pass
+
+def     candidate_based_ransac_similarity_transformation(latent_pts, reference_pts, input_matches_file):
+    """
+    Finds the parameter of a similarity transformation between the latent and reference points using a few initial candidates.
+    This accelarates convergence of RANSAC algorithm, since it does not have to loop through all possible points in reference
+    image to find each match, only for each candidate.
+
+    If RANSAC finds an acceptable correspondence, returns the parameters s, theta, tx and ty. Otherwise, returns -1 in all parameters.
+
+    Input: 
+        latent_pts:         latent minutia points extracted from fingernet -> list of tuples
+        reference_pts:      reference minutia points extracted from fingernet that are correspondent to latent_pts -> list of tuples
+        input_matches_file: file containing the reference candidates for minutias in the latent. This could be calculated via a contrastive learning network.
+
+    Output: parameters of the similarity transformation scale, theta, tx, ty.
+    
+    For further reference, please check sections 5.2.2 and 5.6 of the book Theory and Applications of Image Registration - Goshtasby 2017
+    """
+
+    # best parameters
+    best_scale               = -1
+    best_theta               = -1
+    best_tx                  = -1
+    best_ty                  = -1
+    best_n_homologous_points = 0
+    best_inliers             = []
+
+    max_pixel_distance_tolerance          = 6
+    number_of_iterations                  = 0
+    minimum_fraction_of_homologous_points = 0.12
+    # MAX_ITER                              = get_max_ransac_iter_from_confidence(0.99, len(reference_pts))
+    epsilon                               = 0.1
+    theta_max                             = np.pi/8
+
+
+    matches = read_match_list(input_matches_file)
+    matches_idx = [i for i in range(len(matches))]
+
+    # Generating every line (pair-wise combination) in latent minutias
+    latent_pairs    = [comb for comb in combinations(matches_idx, 2)]
+
+
+    # randomly shuffling latent pairs
+    shuffle(latent_pairs)
+
+    for (l1,l2) in latent_pairs:
+        x1, y1 = _get_latent_point_from_match_idx(l1, matches, latent_pts)
+        x2, y2 = _get_latent_point_from_match_idx(l2, matches, latent_pts)
+
+        l1_candidates = _get_ref_candidates_points_from_match_idx(l1, matches, reference_pts)
+        l2_candidates = _get_ref_candidates_points_from_match_idx(l2, matches, reference_pts)
+
+        candidate_line_combinations = _get_candidates_combinations(l1_candidates, l2_candidates)
+
+
+        for (R1,R2) in candidate_line_combinations:
+            # if number_of_iterations%100 == 0:
+            #     print('Ransac progress: iteration {}/{}'.format(number_of_iterations+1, len(latent_pairs) * 16))
+            
+            number_of_iterations += 1    
+            
+            X1, Y1 = R1
+            X2, Y2 = R2
+
+            # HIPOTHESIS STAGE
+            # determining the scale parameter
+            latent_distance    = np.sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2)) # euc distance of latent
+            reference_distance = np.sqrt((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2)) # euc distance of ref
+            scale              = reference_distance/latent_distance
+
+            if (1 - epsilon) > scale or scale > (1 + epsilon): # failed distance condition
+                    continue # go to next iteration
+            
+            # determining the angle between the two lines
+            latent_vector    = (x2 - x1, y2 - y1)
+            reference_vector = (X2 - X1, Y2 - Y1)
+            theta = _float_angle_between_vectors(latent_vector, reference_vector)
+
+            if (theta > theta_max) and (theta < 2 * (np.pi - theta_max)): # failed angle condition
+                continue
+            # getting mid-point of l1l2 and R1R2; x' = (x1 + x2)/2; y' = (y1 + y2)/2
+            latent_mid_point    = ((x1 + x2)/2 , (y1 + y2)/2)  
+            reference_mid_point = ((X1 + X2)/2 , (Y1 + Y2)/2)
+
+            # finding tx and ty from homologous points (mid latent and mid reference)
+            tx = reference_mid_point[0] - scale * (latent_mid_point[0] * np.cos(theta) - latent_mid_point[1] * np.sin(theta))
+            ty = reference_mid_point[1] - scale * (latent_mid_point[0] * np.sin(theta) + latent_mid_point[1] * np.cos(theta))
+
+            # VERIFICATION STAGE
+
+            number_of_homologous_points   = 0
+            inliers                       = []
+
+            # print('#################################')
+            for idx in matches_idx:
+                x, y = _get_latent_point_from_match_idx(idx, matches, latent_pts)
+
+                # finding the coordinates of transformed latent point
+                X_hat = scale * x * np.cos(theta) - scale * y * np.sin(theta) + tx
+                Y_hat = scale * x * np.sin(theta) + scale * y * np.cos(theta) + ty
+                
+                # finding the best correspondance in the reference minutias
+                min_distance = 100000000
+                best_X, best_Y = (0,0)
+                ref_candidates = _get_ref_candidates_points_from_match_idx(idx, matches, reference_pts)
+                for (X,Y) in ref_candidates:
+                    distance = np.sqrt((X_hat - X)*(X_hat - X) + (Y_hat - Y)*(Y_hat - Y))
+                    if distance < min_distance:
+                        min_distance = distance
+                        best_X, best_Y = X, Y
+                
+
+                if min_distance < max_pixel_distance_tolerance:
+                    inliers.append(((x, y), (best_X,best_Y)))
+                    number_of_homologous_points += 1
+                
+            if number_of_homologous_points > best_n_homologous_points:
+                best_scale               = scale
+                best_theta               = theta
+                best_tx                  = tx
+                best_ty                  = ty
+                best_inliers             = inliers
+                best_n_homologous_points = number_of_homologous_points
+            
+            if best_n_homologous_points/len(latent_pts) > minimum_fraction_of_homologous_points:
+                return best_scale, best_theta, best_tx, best_ty, best_inliers
+    
+    return -1, -1, -1, -1, []
+
+def _get_latent_point_from_match_idx(match_idx, matches, latent_mnts):
+    """
+    Auxiliary function to candidate_based_ransac_similarity_transformation
+    """
+    return latent_mnts[matches[match_idx][0]]
+
+def _get_ref_candidates_points_from_match_idx(match_idx, matches, reference_mnts):
+    """
+    Auxiliary function to candidate_based_ransac_similarity_transformation
+    """
+    return [reference_mnts[i] for i in matches[match_idx][1:]]
+
+def _get_candidates_combinations(mnt1_candidates, mnt2_candidates):
+    """
+    Generates every pair-wise combination between reference candidates for two latent minutias.
+    """
+    unique_combinations = []
+    for pt1 in mnt1_candidates:
+        for pt2 in mnt2_candidates:
+            unique_combinations.append((pt1, pt2))
+
+    return unique_combinations
+
+def descriptor_based_ransac_similarity_transformation(latent_pts, reference_pts):
+    """
+    Finds the parameter of a similarity transformation between the latent and reference points using an initial estimation.
+    This accelarates convergence of RANSAC algorithm, since it does not have to loop through all possible points in reference
+    image to find each match.
+
+    If RANSAC finds an acceptable correspondence, returns the parameters s, theta, tx and ty. Otherwise, returns -1 in all parameters.
+
+    Input: 
+        latent_pts: latent minutia points extracted from fingernet -> list of tuples
+        reference_pts: reference minutia points extracted from fingernet that are correspondent to latent_pts -> list of tuples
+    
+    Output: parameters of the similarity transformation scale, theta, tx, ty.
+    
+    For further reference, please check sections 5.2.2 and 5.6 of the book Theory and Applications of Image Registration - Goshtasby 2017
+    """
+
+    if len(latent_pts) != len(reference_pts):
+        raise ValueError('Input lists must have the same dimension')
+
+    max_pixel_distance_tolerance          = 8
+    minimum_fraction_of_homologous_points = 0.25
+    epsilon                               = 0.5
+    number_of_iterations                  = 0
+
+    # best parameters
+    best_scale               = -1
+    best_theta               = -1
+    best_tx                  = -1
+    best_ty                  = -1
+    best_n_homologous_points = 0
+    best_inliers             = []
+    # MAX_ITER                              = get_max_ransac_iter_from_confidence(0.99, len(initial_homologous_estimation)) # no max iter, the algorithm is much faster
+
+    # selecting pairs of points from latent
+    homologous_points = list(zip(latent_pts, reference_pts))
+    homologous_pairs  = [comb for comb in combinations(homologous_points, 2)]
+
+    # shuffling lines
+
+    shuffle(homologous_pairs)
+
+    for pair in homologous_pairs:
+        # print('Ransac progress: iteration {}/{}'.format(number_of_iterations+1, len(homologous_pairs)))
+
+        number_of_iterations += 1
+
+        # (x,y) -> points in latent; (X,Y) -> points in reference
+        ((x1,y1), (X1,Y1)), ((x2, y2), (X2,Y2)) = pair
+
+        # HIPOTHESIS STAGE
+        # determining the scale parameter
+        latent_distance    = np.sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2)) # euc distance of latent
+        reference_distance = np.sqrt((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2)) # euc distance of ref
+        scale              = reference_distance/latent_distance
+
+        if (1 - epsilon) > scale or scale > (1 + epsilon): # failed distance condition
+                continue # go to next iteration
+        
+        # determining the angle between the two lines
+        latent_vector    = (x2 - x1, y2 - y1)
+        reference_vector = (X2 - X1, Y2 - Y1)
+        theta = _float_angle_between_vectors(latent_vector, reference_vector)
+
+        # getting mid-point of l1l2 and R1R2; x' = (x1 + x2)/2; y' = (y1 + y2)/2
+        latent_mid_point    = ((x1 + x2)/2 , (y1 + y2)/2)  
+        reference_mid_point = ((X1 + X2)/2 , (Y1 + Y2)/2)
+
+        # finding tx and ty from homologous points (mid latent and mid reference)
+        tx = reference_mid_point[0] - scale * (latent_mid_point[0] * np.cos(theta) - latent_mid_point[1] * np.sin(theta))
+        ty = reference_mid_point[1] - scale * (latent_mid_point[0] * np.sin(theta) + latent_mid_point[1] * np.cos(theta))
+
+        # VERIFICATION STAGE
+
+        number_of_homologous_points   = 0
+        inliers                       = []
+
+        for i, (x,y) in enumerate(latent_pts):
+            # finding the coordinates of transformed latent point
+            X_hat = scale * x * np.cos(theta) - scale * y * np.sin(theta) + tx
+            Y_hat = scale * x * np.sin(theta) + scale * y * np.cos(theta) + ty
+            
+            # calculating distance to best correspondent
+
+            (X,Y) = reference_pts[i]
+            distance = np.sqrt((X_hat - X)*(X_hat - X) + (Y_hat - Y)*(Y_hat - Y))
+            
+
+            if distance < max_pixel_distance_tolerance:
+                inliers.append(((x, y), (X,Y)))
+                number_of_homologous_points += 1
+        
+        if number_of_homologous_points > best_n_homologous_points:
+            best_scale               = scale
+            best_theta               = theta
+            best_tx                  = tx
+            best_ty                  = ty
+            best_inliers             = inliers
+            best_n_homologous_points = number_of_homologous_points
+        
+    if best_n_homologous_points/len(latent_pts) > minimum_fraction_of_homologous_points:
+        return best_scale, best_theta, best_tx, best_ty, best_inliers
+    
+    return -1, -1, -1, -1, []
+
+def brute_force_ransac_similarity_transformation(latent_pts, reference_pts):
+    """
+    Finds the parameters of a similarity transformation between the latent and reference points using brute force.
+    If there is no correspondence between the two points, it return -1 in all parameters. 
+    Otherwise, returns the found parameters s,tx, ty and theta.
+    
+    Input: latent minutia, reference minutia - candidate to homologous points
+    Output: parameters of a similarity transformation scale, theta, tx, ty. 
+    
+    For further reference, please check section 5.2.2 of the book Theory and Applications of Image Registration - Goshtasby 2017
+    """
+    max_pixel_distance_tolerance          = 4
+    number_of_iterations                  = 0
+    minimum_fraction_of_homologous_points = 0.25
+    MAX_ITER                              = get_max_ransac_iter_from_confidence(0.99, len(reference_pts))
+    epsilon                               = 0.1
+
+    # selecting pairs of points from latent and from reference
+    latent_pairs    = [comb for comb in combinations(latent_pts, 2)]
+    reference_pairs = [comb for comb in combinations(reference_pts, 2)]
+
+    # randomly shuffling points and lines
+
+    shuffle(latent_pts)
+    shuffle(reference_pts)
+    shuffle(latent_pairs)
+    shuffle(reference_pairs)
+
+    print(len(latent_pairs) * len(reference_pairs))
+    for (l1,l2) in latent_pairs:
+        for (R1,R2) in reference_pairs:
+            if number_of_iterations%10000 == 0:
+                print('Ransac progress: iteration {}/{}'.format(number_of_iterations+1, MAX_ITER))
+            # HIPOTHESIS STAGE
+            # determining the scale parameter
+            latent_distance    = np.sqrt((l1[0] - l2[0])*(l1[0] - l2[0]) + (l1[1] - l2[1])*(l1[1] - l2[1])) # euc distance of latent
+            reference_distance = np.sqrt((R1[0] - R2[0])*(R1[0] - R2[0]) + (R1[1] - R2[1])*(R1[1] - R2[1])) # euc distance of ref
+            scale              = reference_distance/latent_distance
+
+            # incrementing iterations
+            number_of_iterations += 1
+
+            if (1 - epsilon) > scale or scale > (1 + epsilon): # failed distance condition
+                continue # go to next iteration
+
+            # determining the angle between the two lines
+            latent_vector    = (l2[0] - l1[0], l2[1] - l1[1])
+            reference_vector = (R2[0] - R1[0], R2[1] - R1[1])
+            theta = _float_angle_between_vectors(latent_vector, reference_vector)
+
+            # if (theta > np.pi/12) and (theta < (23/12 * np.pi)): # failed angle condition
+            #     continue  # go to next iteration
+
+            # getting mid-point of l1l2 and R1R2; x' = (x1 + x2)/2; y' = (y1 + y2)/2
+            latent_mid_point    = ((l2[0] + l1[0])/2 , (l2[1] + l1[1])/2)  
+            reference_mid_point = ((R2[0] + R1[0])/2 , (R2[1] + R1[1])/2)
+
+            # finding tx and ty from homologous points (mid latent and mid reference)
+            tx = reference_mid_point[0] - scale * (latent_mid_point[0] * np.cos(theta) - latent_mid_point[1] * np.sin(theta))
+            ty = reference_mid_point[1] - scale * (latent_mid_point[0] * np.sin(theta) + latent_mid_point[1] * np.cos(theta))
+
+            # VERIFICATION STAGE
+            number_of_homologous_points   = 0
+            inliers = []
+
+            # print('#################################')
+            for (x,y) in latent_pts:
+                # finding the coordinates of transformed latent point
+                X_hat = scale * x * np.cos(theta) - scale * y * np.sin(theta) + tx
+                Y_hat = scale * x * np.sin(theta) + scale * y * np.cos(theta) + ty
+                
+                # finding the best correspondance in the reference minutias
+                distances    = np.zeros((len(reference_pts,)))
+                for i, (X,Y) in enumerate(reference_pts):
+                    distances[i] = np.sqrt((X_hat - X)*(X_hat - X) + (Y_hat - Y)*(Y_hat - Y))
+                
+                best_correspondent_distance = np.min(distances)
+                index = np.argmin(distances)
+
+                if best_correspondent_distance < max_pixel_distance_tolerance:
+                    inliers.append(((x, y),(reference_pts[(index)][0], reference_pts[(index)][1])))
+                    number_of_homologous_points += 1
+                
+                if number_of_homologous_points/len(latent_pts) > minimum_fraction_of_homologous_points:
+                    return scale, theta, tx, ty, inliers
+            
+            if number_of_iterations > MAX_ITER:
+                print('Ransac failed! Max number of iterations reached')
+                return -1, -1, -1, -1, [] # algorithm failed
+    
+    return -1, -1, -1, -1, []
+
+def get_max_ransac_iter_from_confidence(confidence, number_of_points_in_reference):
+    """
+    Check section 5.2.2 of the book Theory and Applications of Image Registration - Goshtasby 2017 to understand this expression
+    """
+    max_iter = np.log(1 - confidence)/(np.log(1 - 1/(4 * number_of_points_in_reference * number_of_points_in_reference)))
+    return int(max_iter) + 1
+
+def clustering_rigid_transformation(latent_pts, reference_pts):
+    """
+    Finds the parameters of a rigid transformation between the latent and reference points. If there is no correspondence between
+    the two points, it return 0 in all parameters and an error flag. Otherwise, returns the found parameters tx, ty and theta.
+    
+    Input: latent minutia, reference minutia - candidate to homologous points
+    Output: parameters of a rigid transformation tx, ty, theta and an status flag
+    
+    For further reference, please check section 5.2.1 of the book Theory and Applications of Image Registration - Goshtasby 2017
+    """
+    
+    # first estimate the rotational difference between the two sets of points
+    theta  = _estimate_rotational_difference(latent_pts, reference_pts)
+    tx, ty = _estimate_translational_difference(latent_pts, reference_pts, 0)
+    scale   = 1
+    inliers = []
+
+
+    return (scale, theta, tx, ty, inliers)
+
+def _estimate_rotational_difference(latent_pts, reference_pts):
+    """
+    Determining rotational diﬀerence between two point sets by clustering
+    """
+    rotation_histogram = np.zeros((181,))
+    epsilon            = 0.01
+
+    latent_pairs    = [comb for comb in combinations(latent_pts, 2)]
+    reference_pairs = [comb for comb in combinations(reference_pts, 2)]
+
+    # randomly shuffling points and lines
+    shuffle(latent_pts)
+    shuffle(reference_pts)
+    shuffle(latent_pairs)
+    shuffle(reference_pairs)
+
+
+    iter = 0
+    MAX_ITER = len(latent_pts) * len(reference_pts) * len(reference_pts) # assumes that half of the mnts in latent appear in reference
+
+    try:
+        for latent_pair in latent_pairs:
+            for reference_pair in reference_pairs:
+                l1, l2 = latent_pair
+                R1, R2 = reference_pair
+
+                # calculating ratio between distances of points
+                latent_distance    = np.sqrt((l1[0] - l2[0])*(l1[0] - l2[0]) + (l1[1] - l2[1])*(l1[1] - l2[1])) # euc distance of latent
+                reference_distance = np.sqrt((R1[0] - R2[0])*(R1[0] - R2[0]) + (R1[1] - R2[1])*(R1[1] - R2[1])) # euc distance of ref
+                distance_ratio     = latent_distance/reference_distance
+
+                if (1 - epsilon) > distance_ratio or distance_ratio > (1 + epsilon): # failed distance condition
+                    continue # go to next iteration
+                    
+                # calculating angle between the latent vector and the reference vector
+                latent_vector    = (l2[0] - l1[0], l2[1] - l1[1])
+                reference_vector = (R2[0] - R1[0], R2[1] - R1[1])
+                theta = _integer_angle_between_vectors(latent_vector, reference_vector)
+
+                # incrementing histogram at the calculated theta
+                rotation_histogram[theta] += 1
+
+                # checking if reached max number of iterations
+                iter = iter + 1
+                if iter >= MAX_ITER:
+                    raise MaxIterReached('Max number of iterations achieved')
+
+    except MaxIterReached:
+        pass
+
+    
+    if DEBUG:
+        _plot_rotation_histogram(rotation_histogram)
+
+    estimated_theta = np.argmax(rotation_histogram)
+
+    return estimated_theta
+
+def _estimate_translational_difference(latent_pts, reference_pts, theta):
+    """
+    Determining translational diﬀerence between two point sets by clustering
+    """
+    d = 512
+    translation_histogram = np.zeros((2*d + 1, 2*d + 1))
+    iter = 0
+
+    MAX_ITER = len(latent_pts) * len(reference_pts) / 2
+
+    theta = theta / 180 * np.pi # deg to rad
+    try:
+        for (x,y) in latent_pts:
+            for (X,Y) in reference_pts:
+                tx = X - x * np.cos(theta) + y * np.sin(theta)
+                ty = Y - x * np.sin(theta) - y * np.cos(theta)
+
+                if (-d <= tx) and (tx < d) and (-d <= ty) and (ty < d):
+                    translation_histogram[int(tx) + d, int(ty) + d] += 1
+                else:
+                    continue # go to next iteration
+                
+                # checking if reached max number of iterations
+                iter = iter + 1
+                if iter >= MAX_ITER:
+                    raise MaxIterReached('Max number of iterations achieved')
+
+    except MaxIterReached:
+        pass
+
+    
+
+    # getting the max coordinates from the histogram
+    max_coords = np.where(translation_histogram == np.amax(translation_histogram))
+    tx, ty     = max_coords[0][0], max_coords[1][0]
+    tx, ty     = (tx - d, ty - d)
+    
+    if DEBUG:
+            _plot_translation_histogram(translation_histogram)
+
+    return tx, ty
+
+
+
+def _integer_angle_between_vectors(latent_vector, reference_vector):
+    unit_latent_vector    = latent_vector / np.linalg.norm(latent_vector)
+    unit_reference_vector = reference_vector / np.linalg.norm(reference_vector)
+
+    dot_product = np.dot(unit_latent_vector, unit_reference_vector)
+
+    angle = np.arccos(np.round(dot_product, 4))
+    angle = int(angle/np.pi * 180)
+
+    return angle
+
+def _float_angle_between_vectors(latent_vector, reference_vector):
+    unit_latent_vector    = latent_vector / np.linalg.norm(latent_vector)
+    unit_reference_vector = reference_vector / np.linalg.norm(reference_vector)
+
+    dot_product = np.dot(unit_latent_vector, unit_reference_vector)
+
+    angle = np.arccos(np.round(dot_product, 4))
+
+    return angle
+
+
+
+
+
+    

@@ -1,0 +1,177 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+#include "auxiliarywindow.h"
+
+#include <QCloseEvent>
+#include <QColorDialog>
+#include <QFileDialog>
+#include <QMessageBox>
+
+#include <iostream>
+
+MainWindow::MainWindow(  QStringList &args, QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    undoStack = new QUndoStack(this);
+    showMaximized();
+    ui->setupUi(this);
+    updateMarker();
+    ui->mrkIDSpinBox->setFocus();
+    current_dir = QDir::currentPath();
+
+    if (args.size() == 4)
+    {   // experiment mode
+        ui->annotGView->openImage(args[1]);
+        ui->annotGView->openMarkers(args[2]);
+        ui->annotGView->setCurrentAlgorithm(args[3]);
+        ui->segAlgoCombBox->setCurrentText(args[3]);
+        ui->annotGView->startExp();
+    }
+}
+
+MainWindow::~MainWindow()
+{
+    delete undoStack;
+    delete ui;
+}
+
+bool MainWindow::maybeSave()
+{
+    if (ui->annotGView->isModified()) {
+       QMessageBox::StandardButton ret;
+       ret = QMessageBox::warning(this, tr("Imago"),
+                          tr("The image has been modified.\n"
+                             "Do you want to save your changes?"),
+                          QMessageBox::Save | QMessageBox::Discard
+                          | QMessageBox::Cancel);
+        if (ret == QMessageBox::Save) {
+            return (ui->annotGView->saveGrayLabel() && saveMarkers()) ;
+        } else if (ret == QMessageBox::Cancel) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (maybeSave()) {
+        event->accept();
+    } else {
+        event->ignore();
+    }
+}
+
+void MainWindow::loadImage()
+{
+    if (maybeSave()) {
+        QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), current_dir);
+        if (!fileName.isEmpty()) {
+            current_dir = getDirectory(fileName);
+            ui->annotGView->openImage(fileName);
+        }
+    }
+}
+
+void MainWindow::loadDir()
+{
+    // TODO
+    //  - when implemented should move from here
+    std::cout << "loadDir" << std::endl;
+}
+
+bool MainWindow::saveDir()
+{
+    // TODO
+    //  - when implemented should move from here
+    std::cout << "loadDir" << std::endl;
+    return true;
+}
+
+void MainWindow::loadMarkers()
+{
+    if (maybeSave()) {
+        QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), current_dir);
+        if (!fileName.isEmpty()) {
+            current_dir = getDirectory(fileName);
+            ui->annotGView->openMarkers(fileName);
+        }
+    }
+}
+
+bool MainWindow::saveMarkers()
+{
+    QString initFilePath = current_dir + "/untitled.txt";
+
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save As"),
+                                                    initFilePath, tr("Text (*.txt)"));
+
+    if (fileName.isEmpty())
+        return false;
+
+    return ui->annotGView->saveMarkers(fileName);
+}
+
+void MainWindow::updateMarkerColor()
+{
+    Markers *markers = ui->annotGView->getMarkers();
+    QColor newColor = QColorDialog::getColor(markers->getColor());
+    if (newColor.isValid()) {
+        QRgb col = newColor.rgb();
+        markers->setColor(col);
+        setMarkerBoxColor(col);
+        ui->annotGView->setPenColor(newColor);
+        ui->annotGView->updateScribblesColor();
+        ui->annotGView->setDraw();
+    }
+}
+
+void MainWindow::setMarkerBoxColor(  QColor &col)
+{
+    QPalette p = ui->mrkColor->palette();
+    p.setColor(ui->mrkColor->backgroundRole(), col);
+    ui->mrkColor->setPalette(p);
+    ui->mrkColor->update();
+    ui->annotGView->setDraw();
+}
+
+void MainWindow::addMarker()
+{
+    QColor newColor = QColorDialog::getColor();
+    if (newColor.isValid()) {
+        ui->annotGView->setDraw();
+        Markers *markers = ui->annotGView->getMarkers();
+        markers->addMarker();
+        markers->setColor(newColor.rgb());
+        updateMarker();
+        ui->annotGView->updateMarkerTable();
+    }
+}
+
+void MainWindow::updateMarker(int index)
+{
+    Markers *markers = ui->annotGView->getMarkers();
+    if (markers->setCurrent(index)) {
+        updateMarker();
+        ui->annotGView->setCurrentLabel(index);
+    }
+}
+
+
+void MainWindow::updateMarker()
+{
+    Markers *markers = ui->annotGView->getMarkers();
+    setMarkerBoxColor(markers->getColor());
+    ui->annotGView->setPenWidth(ui->mrkSizeSpinBox->value());
+    ui->annotGView->setPenColor(markers->getColor());
+    ui->mrkIDSpinBox->setMaximum(static_cast<int>(markers->getSize()) - 1);
+    ui->mrkIDSpinBox->setValue(static_cast<int>(markers->getCurrent()));
+}
+
+
+QString MainWindow::getDirectory(  QString &fileName)
+{
+    int pos = fileName.lastIndexOf(QChar('/'));
+    return fileName.left(pos);
+}

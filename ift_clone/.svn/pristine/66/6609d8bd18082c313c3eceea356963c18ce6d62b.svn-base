@@ -1,0 +1,24 @@
+#include "mainwindow.h"
+#include <QApplication>
+#include <QStringList>
+
+
+QStringList arguments(int argc, char *argv[])
+{
+    QStringList list;
+    for (int a = 0; a < argc; ++a) {
+        list << QString::fromLocal8Bit(argv[a]);
+    }
+    return list;
+}
+
+
+int main(int argc, char *argv[])
+{
+    QApplication a(argc, argv);
+    QStringList args = arguments(argc, argv);
+    MainWindow w(args);
+    w.show();
+
+    return a.exec();
+}

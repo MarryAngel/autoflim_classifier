@@ -1,0 +1,900 @@
+#include "annotationarea.h"
+#include "auxiliarywindow.h"
+#include "helper.h"
+#include "metriclearnwindow.h"
+
+#include "imgproc/filter.h"
+#include "segmentation/watercut.h"
+#include "segmentation/dyntree.h"
+#include "segmentation/closestdyntree.h"
+#include "utils/algorithm.h"
+
+#include <QGraphicsLineItem>
+#include <QMessageBox>
+#include <QScrollBar>
+#include <QWheelEvent>
+
+AnnotationArea::AnnotationArea(QWidget *parent) :
+    QGraphicsView(parent),
+    featImg(1, 1, 1),
+    superpixels(1, 1, 1)
+{
+    setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+
+    scene = new QGraphicsScene(this);
+    setScene(scene);
+
+    // marker settings
+    markers = new Markers(this);
+    markerPen.setCapStyle(Qt::RoundCap);
+    markerPen.setJoinStyle(Qt::RoundJoin);
+}
+
+AnnotationArea::~AnnotationArea()
+{
+    maybeDeleteCut();
+    endExp();
+    setOptPathDisplay(false);
+}
+
+bool AnnotationArea::openImage(  QString &fileName)
+{
+    QImage loadedImage;
+    if (!loadedImage.load(fileName))
+        return false;
+
+    clearLayers(AllLayers);
+
+    imagePath = fileName;
+    scaleFactor = 1.0;
+    image = loadedImage;
+
+    pixImage = scene->addPixmap(QPixmap::fromImage(image));
+    fitInView(image.rect(), Qt::KeepAspectRatio);
+    addLayer(ImageLayer);
+    update();
+
+    markerImg = QImage(image.width(), image.height(), QImage::Format_Indexed8);
+    updateMarkerTable();
+    markerImg.fill(0);
+
+    initPixMaps();
+
+    imageLoaded = true;
+    modified = false;
+
+    resetFeatImg();
+    setCurrentAlgorithm(algorithm);
+
+    return true;
+}
+
+
+segm::Image<int> AnnotationArea::getLabel()
+{
+    if (exec) {
+        return cut->getLabel();
+    } else {
+        segm::Image<int> lb(featImg.getWidth(), featImg.getHeight());
+        lb.fill(-1);
+        return lb;
+    }
+}
+
+
+segm::Image<int> AnnotationArea::getMarkerImage() {
+    return QImageToSegmImage(markerImg, true);
+}
+
+
+void AnnotationArea::openMarkers(  QString &fileName)
+{
+    // working with file strings in cpp is horrible
+    FILE *file = fopen(fileName.toStdString().c_str(), "r");
+
+    int nSeeds, imgW, imgH;
+    if ((fscanf(file, "%d %d %d", &nSeeds, &imgW, &imgH) != 3) ||
+        (image.width() != imgW || image.height() != imgH))
+    {
+        QMessageBox msgBox;
+        msgBox.setText(tr("Markers data does not match current image"));
+        msgBox.exec();
+        return;
+    }
+
+
+    QPen pen = markerPen;
+    pen.setWidth(1);
+    pen.setCapStyle(Qt::SquareCap);
+    for (int i = 0; i < nSeeds; i++)
+    {
+        int x, y, marker, label;
+        if ((fscanf(file, "%d %d %d %d", &x, &y, &marker, &label) != 4) ||
+            (x < 0 || x >= image.width() || y < 0 || y >= image.height()))
+        {
+            QMessageBox msgBox;
+            QString text = "Invalid marker data on line " + QString::number(i + 2);
+            msgBox.setText(tr(text.toStdString().c_str()));
+            msgBox.exec();
+            return;
+        }
+
+        if (label >= markers->getSize())
+            return; // TODO add new marker color
+
+        QPoint pt(x, y);
+        pen.setColor(QColor(markers->getColor(label)));
+        markerImg.setPixel(pt, static_cast<uint>(label + 1));
+        QPointF scenePt = pixImage->mapToScene(pt);
+        QGraphicsLineItem *item = scene->addLine(scenePt.x(), scenePt.y(),
+                scenePt.x(), scenePt.y() + 0.5f, pen);
+        lineList.push_back(item);
+    }
+
+    fclose(file);
+
+    if (!lineList.empty()) {
+        addLayer(MarkersLayer);
+        modified = true;
+    }
+}
+
+
+bool AnnotationArea::saveMarkers(  QString &fileName)
+{
+    if (!modified) {
+        QMessageBox msgBox;
+        msgBox.setText(tr("Image must be annotated before saving drawn image"));
+        msgBox.exec();
+        return false;
+    }
+
+    FILE *file = fopen(fileName.toStdString().c_str(), "w");
+
+    int count = 0;
+    for (int i = 0; i < markerImg.width(); i++) {
+        for (int j = 0; j < markerImg.height(); j++) {
+            int label = markerImg.pixelIndex(i, j);
+            if (label > 0) count++;
+        }
+    }
+
+    fprintf(file, "%d %d %d\n", count, markerImg.width(), markerImg.height());
+
+    for (int i = 0; i < markerImg.width(); i++) {
+        for (int j = 0; j < markerImg.height(); j++) {
+            int label = markerImg.pixelIndex(i, j);
+            if (label > 0)
+                fprintf(file, "%d %d %d %d\n", i, j, -1, label - 1);
+        }
+    }
+
+    fclose(file);
+
+    return true;
+}
+
+
+void AnnotationArea::setCurrentAlgorithm(  QString &algo)
+{
+    algorithm = algo;
+    maybeDeleteCut();
+
+    if (!imageLoaded)
+        return;
+
+    if (algorithm == "WaterCut") {
+        cut = new segm::WaterCut(featImg);
+    } else if (algorithm == "DynTree") {
+        cut = new segm::DynTree(featImg);
+    } else if (algorithm == "ClosestDynTree") {
+        cut = new segm::ClosestDynTree(featImg);
+    } else {
+        throw std::invalid_argument("Algorithm not found on function call, setCurrentAlgorithm");
+    }
+
+    cutAllocated = true;
+}
+
+
+void AnnotationArea::setCurrentColorSpace(  QString &space)
+{
+    SegmImg::ColorSpace to;
+
+    if (space == "Lab") {
+        to = SegmImg::lab;
+    } else if (space == "RGB") {
+        to = SegmImg::rgb;
+    } else if (space == "RG Chromaticity") {
+        to = SegmImg::rgchroma;
+    } else if (space == "YCbCr") {
+        to = SegmImg::ypbpr;
+    } else if (space == "XYZ") {
+        to = SegmImg::xyz;
+    } else if (space == "HSV") {
+        to = SegmImg::hsv;
+    } else {
+        throw std::invalid_argument("Color Space not found on function call, setCurrentColorSpace");
+    }
+
+    colorSpace = to;
+    resetFeatImg();
+}
+
+
+void AnnotationArea::setCurrentFeatureSpace(  QString &space)
+{
+
+}
+
+
+void AnnotationArea::runBlur()
+{
+    segm::Filter filter = segm::Filter::gaussian(blurSize, stdDev);
+    featImg = segm::Filter::convolve(featImg, filter);
+
+    if (featSpace == Color && cutAllocated) {
+        cut->setFeats(featImg.getFeats());
+        superpixels.setFeats(featImg.getFeats());
+    }
+    addFeatStatus(Blurred);
+}
+
+
+bool AnnotationArea::saveColorLabel()
+{
+    if (!wasSegmentationExecuted())
+        return false;
+
+    QVector<QRgb> table = getColorTable();
+    QImage label = segmImageToQImage(cut->getLabel(), table, true);
+    return saveImage(this, label);
+}
+
+
+bool AnnotationArea::saveGrayLabel()
+{
+    if (!wasSegmentationExecuted())
+        return false;
+
+    segm::Image<int> result = cut->getLabel();
+    QImage label(result.getWidth(), result.getHeight(), QImage::Format_Grayscale8);
+
+    for (int j = 0; j < label.height(); j++) {
+        for (int i = 0; i < label.width(); i++) {
+            int val = result(i, j);
+            label.setPixelColor(i, j, qRgb(val, val, val));
+        }
+    }
+
+    return saveImage(this, label, "pgm");
+}
+
+
+bool AnnotationArea::saveObjectLabel()
+{
+    if (!wasSegmentationExecuted())
+        return false;
+
+    segm::Image<int> label = cut->getLabel();
+    QImage copy(image);
+
+    QColor wht = QColor(Qt::white);
+    for (int j = 0; j < copy.height(); j++) {
+        for (int i = 0; i < copy.width(); i++) {
+            if (!label(i, j))
+                copy.setPixelColor(i, j, wht);
+        }
+    }
+
+    return saveImage(this, copy);
+}
+
+
+bool AnnotationArea::saveDrawnImage()
+{
+    if (!modified) {
+        QMessageBox msgBox;
+        msgBox.setText(tr("Image must be annotated before saving drawn image"));
+        msgBox.exec();
+        return false;
+    }
+
+    QImage merged = mergeImages(image, markerImg);
+    return saveImage(this, merged);
+}
+
+
+void AnnotationArea::runSegmentation()
+{
+    segm::Image<int> seeds = QImageToSegmImage(markerImg, true);
+    cut->run(seeds);
+    overlayLabel();
+    exec = true;
+}
+
+
+void AnnotationArea::resetSegmentation()
+{
+    clearLayers(MarkersLayer | LabelLayer);
+    if (exec)
+    {
+        setOptPathDisplay(false); // this clears forestlayer
+        modified = false;
+        exec = false;
+    }
+}
+
+
+void AnnotationArea::setOptPathDisplay(bool status)
+{
+    showOptPath = status;
+    if (showOptPath) {
+        if (!exec) {
+            QMessageBox msgBox;
+            msgBox.setText(tr("Segmentation must be run before view optimum paths."));
+            msgBox.exec();
+            showOptPath = false;
+            emit disableOptPathDisplay();
+        } else {
+            roots = new segm::Image<int>(cut->getRoot());
+            optForest = new QImage(segmImageToHeatMap(((!log10Map && !sqrtMap) ? cut->getPredCount() :
+                                                       (log10Map ? segmImageLog10(cut->getPredCount()) :
+                                                       segmImageSqrt(cut->getPredCount())))));
+            addLayer(ForestLayer);
+        }
+    } else {
+        if (!roots) {
+            delete roots;
+            roots = nullptr;
+        }
+
+        if (!optForest) {
+            delete optForest;
+            optForest = nullptr;
+        }
+
+        clearLayers(ForestLayer);
+    }
+}
+
+
+void AnnotationArea::setSuperpixelDisplay(bool status)
+{
+    if (status)
+    {
+        segm::Image<int> border(superpixels.getBorder());
+        QImage opaque_bord(border.getWidth(), border.getHeight(), QImage::Format_ARGB32);
+        opaque_bord.fill(Qt::transparent);
+
+        for (int i = 0; i < opaque_bord.width(); i++) {
+            for (int j = 0; j < opaque_bord.height(); j++) {
+                if (border(i, j))
+                    opaque_bord.setPixelColor(i, j, Qt::green);
+            }
+        }
+
+        pixSuperpixel->setPixmap(QPixmap::fromImage(opaque_bord));
+        addLayer(SuperpixelLayer);
+    } else {
+        clearLayers(SuperpixelLayer);
+    }
+}
+
+
+void AnnotationArea::floodSuperpixels()
+{
+    if (!cutAllocated)
+        throw std::runtime_error("Tried to overlay label image when cut was not allocated");
+
+    if (!exec)
+        return;
+
+    segm::Image<int> filled = propagateLabel(cut->getLabel(), superpixels.getLabel());
+
+    QVector<QRgb> table = getColorTable();
+    QImage label = segmImageToQImage(filled, table, true);
+
+    QImage labImage(label.size(), QImage::Format_ARGB32);
+    labImage.fill(Qt::transparent);
+    QPainter painter(&labImage);
+    painter.setOpacity(0.35);
+    painter.drawImage(QRect(0, 0, labImage.width(), labImage.height()), label);
+    pixLabel->setPixmap(QPixmap::fromImage(labImage));
+    addLayer(LabelLayer);
+}
+
+
+void AnnotationArea::openAuxWindow()
+{
+    if (!exec)
+        return;
+
+    auto window = new AuxiliaryWindow(this);
+    auxWindows.push_back(window);
+    window->setImage(getMapping());
+    window->connectScrollBar(this);
+}
+
+
+void AnnotationArea::openMLWindow()
+{
+    auto window = new MetricLearnWindow(this);
+    window->connectToArea(this);
+}
+
+
+void AnnotationArea::experimentStatus(bool value)
+{
+    if (value)
+        startExp();
+    else
+        endExp();
+}
+
+
+void AnnotationArea::startExp()
+{
+    if (imageLoaded) {
+        expMan = new ExperimentManager(algorithm.toStdString(), imagePath.toStdString());
+        expMan->init();
+        emit disableExp(true);
+    } else {
+        emit disableExp(false);
+    }
+}
+
+
+void AnnotationArea::endExp()
+{
+    if (expMan) {
+        delete expMan;
+        expMan = nullptr;
+    }
+    emit disableExp(false);
+}
+
+void AnnotationArea::fitImageToView()
+{
+    if (imageLoaded) {
+        fitInView(image.rect(), Qt::KeepAspectRatio);
+        scaleFactor = 1.0;
+    }
+}
+
+
+QVector<QRgb> AnnotationArea::getColorTable()
+{
+    QVector<QRgb> copy(markers->getColors());
+    copy.push_front(qRgb(0, 0, 0));
+    return copy;
+}
+
+
+void AnnotationArea::updateScribblesColor()
+{
+    QList<QGraphicsLineItem *> addedLines;
+    for(int i = 0; i < lineList.size(); ) {
+        QLineF line = lineList[i]->line();
+        QPoint imgPt = pixImage->mapFromScene(line.p1()).toPoint();
+        if (markerImg.pixelIndex(imgPt) == (currentLabel + 1)) {
+            scene->removeItem(lineList[i]);
+            delete lineList[i];
+            lineList.removeAt(i);
+            addedLines.push_back(scene->addLine(line, markerPen));
+        } else i++;
+    }
+    lineList.append(addedLines);
+    markerImg.setColorTable(getColorTable());
+    // TODO
+    //  - update segmentation label when color changed
+}
+
+
+void AnnotationArea::popAuxWindow(AuxiliaryWindow *window)
+{
+    for (int i = 0; i < auxWindows.size(); i++) {
+        if (auxWindows[i] == window) {
+            auxWindows.removeAt(i);
+            break;
+        }
+    }
+}
+
+void AnnotationArea::wheelEvent(QWheelEvent *event)
+{
+    double inFactor = 1.1;
+    double outFactor = 0.9;
+
+    QPointF oldPos = mapToScene(event->pos());
+    double factor = 1.0;
+    if (event->delta() > 0 && scaleFactor * inFactor < 10.0) {
+        factor = inFactor;
+    } else if (event->delta() < 0 && scaleFactor * outFactor > 0.8) {
+        factor = outFactor;
+    }
+
+    scale(factor, factor);
+    scaleFactor *= factor;
+    QPointF newPos = mapToScene(event->pos());
+    QPointF delta = newPos - oldPos;
+    translate(delta.x(), delta.y());
+
+    for (auto window : auxWindows) {
+        window->scaleAndTranslate(factor, delta);
+    }
+}
+
+void AnnotationArea::mousePressEvent(QMouseEvent *event)
+{
+    if (showOptPath) {
+        trimForestOn(mapToScene(event->pos()));
+    } else if (imageLoaded && (event->button() == Qt::LeftButton ||
+                               event->button() == Qt::RightButton)) {
+        lastPoint = mapToScene(event->pos());
+        scribbling = true;
+        scribbledDist = 0.0;
+    }
+}
+
+void AnnotationArea::mouseMoveEvent(QMouseEvent *event)
+{
+    if (scribbling) {
+        if (event->buttons() & Qt::LeftButton) {
+            if (penAction == DrawAct)
+                drawLineTo(mapToScene(event->pos()));
+            else if (penAction == EraseAct)
+                eraseLineIn();
+        } else if (event->buttons() & Qt::RightButton) {
+            if (penAction == DrawAct)
+                drawLineTo(mapToScene(event->pos()), 0);
+        }
+    } else if (showOptPath) {
+       drawForestOn(mapToScene(event->pos()));
+    }
+}
+
+void AnnotationArea::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (scribbling) {
+        if (event->button() == Qt::LeftButton) {
+            if (penAction == DrawAct)
+                drawLineTo(mapToScene(event->pos()));
+            else if (penAction == EraseAct)
+                eraseLineIn();
+        } else if (event->button() == Qt::RightButton) {
+            drawLineTo(mapToScene(event->pos()), 0);
+        }
+        scribbling = false;
+
+        if (expMan)
+        {
+            QString resPath = QString::fromStdString(expMan->write("draw", scribbledDist));
+            scribbledDist = 0.0;
+
+            segm::Image<int> seeds = QImageToSegmImage(markerImg, true);
+            cut->run(seeds);
+            segm::Image<int> result = cut->getLabel();
+            QImage label(result.getWidth(), result.getHeight(), QImage::Format_Grayscale8);
+
+            for (int j = 0; j < label.height(); j++) {
+                for (int i = 0; i < label.width(); i++) {
+                    int val = result(i, j);
+                    label.setPixelColor(i, j, qRgb(val, val, val));
+                }
+            }
+
+            label.save(resPath);
+        }
+    }
+}
+
+
+bool AnnotationArea::resetFeatImg()
+{
+    if (!imageLoaded)
+        return false;
+
+    SegmImg orig = QImageToSegmImage(image);
+    segm::Image<double> colored = orig.convert(orig.rgb, colorSpace, 255);
+
+    if (featImg.isChromatic(colorSpace)) {
+        featImg = colored.convert<float>();
+    } else {
+        featImg = colored.rescale<float>();
+    }
+
+    if (cutAllocated) {
+        cut->setFeats(featImg.getFeats());
+    }
+
+    executeISF();
+
+    resetFeatStatus();
+    return true;
+}
+
+
+void AnnotationArea::maybeDeleteCut()
+{
+    if (cutAllocated) {
+        delete cut;
+        cutAllocated = false;
+        exec = false;
+    }
+}
+
+
+void AnnotationArea::initPixMaps()
+{
+    QImage invImg(image.size(), QImage::Format_ARGB32);
+    invImg.fill(Qt::transparent);
+    QPixmap invPix = QPixmap::fromImage(invImg);
+    pixLabel = scene->addPixmap(invPix);
+    pixOptForest = scene->addPixmap(invPix);
+    pixSuperpixel = scene->addPixmap(invPix);
+}
+
+
+void AnnotationArea::drawForestOn(  QPointF &pos)
+{
+    QPoint idx = pixImage->mapFromScene(pos).toPoint();
+    if (!roots->valid(idx.x(), idx.y()))
+        return;
+
+    int p = roots->index(idx.x(), idx.y());
+    int r = (*roots)(p);
+    segm::Image<bool> branch = cut->getBranch(p);
+
+    QImage temp = optForest->convertToFormat(QImage::Format_ARGB32);
+
+    for (int i = 0; i < roots->getHeight() * roots->getWidth(); i++)
+    {
+        if ((*roots)(i) == segm::ForestingTransform::nil || (*roots)(i) != r) {
+            segm::Image<int>::Pixel pix = roots->coord(i);
+            temp.setPixelColor(pix.x, pix.y, Qt::transparent);
+        } else if (branch(i)) {
+            segm::Image<int>::Pixel pix = roots->coord(i);
+            temp.setPixelColor(pix.x, pix.y, Qt::black);
+        }
+    }
+
+    QImage opaque(temp.size(), QImage::Format_ARGB32);
+    opaque.fill(Qt::transparent);
+    QPainter painter(&opaque);
+    painter.setOpacity(0.5);
+    painter.drawImage(QRect(0, 0, opaque.width(), opaque.height()), temp);
+
+    pixOptForest->setPixmap(QPixmap::fromImage(opaque));
+    addLayer(ForestLayer);
+}
+
+
+void AnnotationArea::trimForestOn(  QPointF &pos)
+{
+    if (!cutAllocated)
+        throw std::runtime_error("Optimum forest trim was called without cut being allocated");
+
+    QPoint idx = pixImage->mapFromScene(pos).toPoint();
+    if (!cut->valid(idx.x(), idx.y()))
+        return;
+    cut->trim(idx.x(), idx.y());
+    updateAuxImagePtrs();
+    overlayLabel();
+}
+
+
+void AnnotationArea::drawLineTo(  QPointF &endPoint)
+{
+    // add marker data;
+    modified = true;
+    QLineF line(lastPoint.x(), lastPoint.y(), endPoint.x(), endPoint.y());
+    QGraphicsLineItem *item = scene->addLine(line, markerPen);
+    lineList.push_back(item);
+    lastPoint = endPoint;
+    setMarkerImage(item, currentLabel + 1);
+    if (!lineList.empty())
+        addLayer(MarkersLayer);
+
+    // experimental purposes
+    scribbledDist += line.length();
+}
+
+
+void AnnotationArea::drawLineTo(  QPointF &endPoint, int label)
+{
+    // add marker data;
+    modified = true;
+    QColor prevColor = markerPen.color();
+    setPenColor(QColor(markers->getColor(label)));
+    QLineF line(lastPoint.x(), lastPoint.y(), endPoint.x(), endPoint.y());
+    QGraphicsLineItem *item = scene->addLine(line, markerPen);
+    lineList.push_back(item);
+    lastPoint = endPoint;
+    setPenColor(prevColor);
+    setMarkerImage(item, label + 1);
+    if (!lineList.empty())
+        addLayer(MarkersLayer);
+
+    // experimental purposes
+    scribbledDist += line.length();
+}
+
+
+void AnnotationArea::eraseLineIn()
+{
+    for (int i = 0; i < lineList.count();) {
+        if (lineList[i]->isUnderMouse())
+        {
+            setMarkerImage(lineList[i], 0);
+            scene->removeItem(lineList[i]);
+            delete lineList[i];
+            lineList.removeAt(i);
+        } else i++;
+    }
+    if (lineList.empty())
+        removeLayer(MarkersLayer);
+}
+
+
+void AnnotationArea::overlayLabel()
+{
+    if (!cutAllocated)
+        throw std::runtime_error("Tried to overlay label image when cut was not allocated");
+//
+//    QVector<QRgb> table = getColorTable();
+//    QImage label = segmImageToQImage(cut->getLabel(), table, true);
+//
+//    QImage labImage(label.size(), QImage::Format_ARGB32);
+//    labImage.fill(Qt::transparent);
+//    QPainter painter(&labImage);
+//    painter.setOpacity(0.35);
+//    painter.drawImage(QRect(0, 0, labImage.width(), labImage.height()), label);
+//    pixLabel->setPixmap(QPixmap::fromImage(labImage));
+//    addLayer(LabelLayer);
+
+    QImage red(image.size(), QImage::Format_ARGB32);
+    red.fill(Qt::red);
+    QImageSetAlpha(cut->getBorder(), red);
+    pixLabel->setPixmap(QPixmap::fromImage(red));
+    addLayer(LabelLayer);
+}
+
+
+void AnnotationArea::executeISF()
+{
+    if (!imageLoaded)
+        throw std::runtime_error("ISF executed before image as loaded");
+
+    superpixels = segm::ISF(featImg, alphaSuperpixels, betaSuperpixels);
+    superpixels.run(nSuperpixels, itersSuperpixels);
+
+    if (isLayerActive(SuperpixelLayer))
+        setSuperpixelDisplay(true);
+}
+
+
+QImage AnnotationArea::mergeImages(  QImage &orig,   QImage &mask)
+{
+    if (orig.size() != mask.size())
+        throw std::invalid_argument("Original image and labeled image"
+                                    "must have the same size (function mergeImages)");
+
+    QImage output(orig.size(), QImage::Format_RGB32);
+
+    for (int i = 0; i < output.width(); i++) {
+        for (int j = 0; j < output.height(); j++) {
+            output.setPixelColor(i, j, ((mask.pixelIndex(i, j) > 0) ?
+                                        mask.pixelColor(i, j) : orig.pixelColor(i, j)));
+        }
+    }
+
+    return output;
+}
+
+
+void AnnotationArea::setMarkerImage(  QGraphicsLineItem *item, int label)
+{
+    QRect rec = item->boundingRect().toRect();
+    for (int j = rec.y() - 1; j < rec.y() + rec.height() + 1; j++) {
+        for (int i = rec.x() - 1; i < rec.x() + rec.width() + 1; i++) {
+            QPoint pt(i, j);
+            if (item->contains(pt)) {
+                QPoint imgPt = pixImage->mapFromScene(pt).toPoint();
+                int x = imgPt.x(), y = imgPt.y();
+                if (x >= 0 && x < markerImg.width() && y >= 0 && y < markerImg.height())
+                   markerImg.setPixel(imgPt, static_cast<uint>(label));
+            }
+        }
+    }
+}
+
+
+QImage AnnotationArea::getMapping()
+{
+    QImage result;
+    if (!exec)
+        return result;
+
+    if (mapping == "Cost") {
+        result = segmImageToQImage(((!log10Map && !sqrtMap) ? cut->getCost() :
+                (log10Map ? segmImageLog10(cut->getCost()) : segmImageSqrt(cut->getCost()))), 255);
+    } else if (mapping == "Label") {
+        QVector<QRgb> table = getColorTable();
+        result = segmImageToQImage(cut->getLabel(), table, true);
+    } else if (mapping == "Leaf Predecessor") {
+        result = segmImageToHeatMap(((!log10Map && !sqrtMap) ? cut->getLeafPredCount() :
+                           (log10Map ? segmImageLog10(cut->getLeafPredCount()) : segmImageSqrt(cut->getLeafPredCount()))));
+    } else if (mapping == "Predecessor") {
+        result = segmImageToHeatMap(((!log10Map && !sqrtMap) ? cut->getPredCount() :
+                                     (log10Map ? segmImageLog10(cut->getPredCount()) : segmImageSqrt(cut->getPredCount()))));
+    } else if (mapping == "Root") {
+        result = segmImageToQImage(cut->getRoot());
+    }
+
+    return result;
+}
+
+void AnnotationArea::clearLayers(unsigned int layer)
+{
+    QImage invImg(image.size(), QImage::Format_ARGB32);
+    invImg.fill(Qt::transparent);
+    QPixmap invPix = QPixmap::fromImage(invImg);
+
+    if (isLayerActive(ImageLayer) &&
+        layer & ImageLayer) {
+        pixImage->setPixmap(invPix);
+        removeLayer(ImageLayer);
+    }
+
+    if (isLayerActive(MarkersLayer) &&
+        layer & MarkersLayer) {
+        for (auto line : lineList) {
+            scene->removeItem(line);
+        }
+        lineList.clear();
+        markerImg.fill(0);
+        removeLayer(MarkersLayer);
+    }
+
+    if (isLayerActive(LabelLayer) &&
+        layer & LabelLayer) {
+        pixLabel->setPixmap(invPix);
+        removeLayer(LabelLayer);
+    }
+
+    if (isLayerActive(ForestLayer) &&
+        layer & ForestLayer) {
+        pixOptForest->setPixmap(invPix);
+        removeLayer(ForestLayer);
+    }
+
+    if (isLayerActive(SuperpixelLayer) &&
+        layer & SuperpixelLayer) {
+        pixSuperpixel->setPixmap(invPix);
+        removeLayer(SuperpixelLayer);
+    }
+}
+
+
+void AnnotationArea::updateAuxImagePtrs()
+{
+    if (!cutAllocated)
+        throw std::runtime_error("Roots update was called without cut being allocated");
+
+    delete roots;
+    roots = new segm::Image<int>(cut->getRoot());
+}
+
+
+bool AnnotationArea::wasSegmentationExecuted()
+{
+    if (!exec) {
+        QMessageBox msgBox;
+        msgBox.setText(tr("Segmentation must be executed before saving label image."));
+        msgBox.exec();
+        return false;
+    }
+    return true;
+}
+

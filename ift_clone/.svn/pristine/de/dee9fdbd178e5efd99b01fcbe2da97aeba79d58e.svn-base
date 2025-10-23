@@ -1,0 +1,235 @@
+#ifndef IMAGO_ANNOTATIONAREA_H
+#define IMAGO_ANNOTATIONAREA_H
+
+#include <QGraphicsView>
+#include <QLabel>
+
+#include "markers.h"
+#include "segmqtapi.h"
+#include "experimentmanager.h"
+
+#include "datatypes/forestingtransform.h"
+#include "segmentation/isf.h"
+
+#include <Eigen/Core>
+
+class AuxiliaryWindow;
+
+class AnnotationArea : public QGraphicsView
+{
+    Q_OBJECT
+public:
+
+    typedef enum {
+        DrawAct,
+        EraseAct
+    } PenAction;
+
+    typedef enum {
+        Color,
+        MetricLearn,
+        Conv
+    } FeatureSpace;
+
+    typedef enum : unsigned int {
+        AllLayers = static_cast<unsigned int>(-1),
+        ImageLayer = 0x01,
+        MarkersLayer = 0x02,
+        LabelLayer = 0x04,
+        ForestLayer = 0x08,
+        SuperpixelLayer = 0x10,
+    } Layers;
+
+    typedef enum : unsigned int {
+        Blurred = 0x01,
+        Learned = 0x02,
+        Convoluted = 0x04,
+    } FeatureStatus;
+
+    typedef segm::Image<float> SegmImg;
+
+    explicit AnnotationArea(QWidget *parent = nullptr);
+    ~AnnotationArea() override;
+
+    bool openImage(  QString &fileName);
+
+    SegmImg getFeatImg()   { return featImg; }
+
+    segm::Image<int> getLabel();
+    segm::Image<int> getMarkerImage();
+
+    void openMarkers(  QString &fileName);
+    bool saveMarkers(  QString &fileName);
+
+    bool isModified()   { return modified; }
+    bool executed()   { return exec; }
+
+    Markers *getMarkers()   { return markers; }
+    void setPenColor(  QColor &color) { markerPen.setColor(color); }
+
+    void setCurrentLabel(int label) { currentLabel = label; }
+
+    void updateMarkerTable() { markerImg.setColorTable(getColorTable()); }
+    void updateScribblesColor();
+
+    QVector<QRgb> getColorTable();
+
+    void popAuxWindow(AuxiliaryWindow *window);
+
+public slots:
+    void setCurrentAlgorithm(  QString &algo);
+
+    void setCurrentMapping(  QString &map) { mapping = map; }
+    void setCurrentColorSpace(  QString &space);
+    void setCurrentFeatureSpace(  QString &space);
+
+    void setBlurSize(int size) { blurSize = size; }
+    void setStdDev(double sigma) { stdDev = static_cast<float>(sigma); }
+    void runBlur();
+
+    bool saveColorLabel();
+    bool saveGrayLabel();
+    bool saveObjectLabel();
+    bool saveDrawnImage();
+
+    void runSegmentation();
+    void resetSegmentation();
+
+    void setDraw() { penAction = AnnotationArea::DrawAct; }
+    void setErase() { penAction = AnnotationArea::EraseAct; }
+    void setLog10(bool status) { log10Map = status; emit disableSqrt(false); }
+    void setSqrt(bool status) { sqrtMap = status; emit disableLog10(false); }
+
+    void setNSuperpixels(int n) { nSuperpixels = n; }
+    void setIterSuperpixels(int iter) { itersSuperpixels = iter; }
+    void setAlphaSuperpixels(double alpha) { alphaSuperpixels = static_cast<float>(alpha); }
+    void setBetaSuperpixels(double beta) { betaSuperpixels = static_cast<float>(beta); }
+
+    void setOptPathDisplay(bool status);
+
+    void executeISF();
+    void setSuperpixelDisplay(bool status);
+    void floodSuperpixels();
+
+    void setPenWidth(int width) { markerPen.setWidth(width); }
+
+    void openAuxWindow();
+
+    void openMLWindow();
+
+    void experimentStatus(bool value);
+    void startExp();
+    void endExp();
+
+    void fitImageToView();
+
+signals:
+    void disableOptPathDisplay();
+    void disableLog10(bool status);
+    void disableSqrt(bool status);
+    void disableExp(bool status);
+
+protected:
+    void wheelEvent(QWheelEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+
+private:
+    QList<QGraphicsLineItem *> lineList;
+
+    double scaleFactor = 1.0;
+    bool modified = false;
+    bool exec = false;
+    bool scribbling = false;
+    bool showOptPath = false;
+    bool imageLoaded = false;
+    PenAction penAction = DrawAct;
+    bool log10Map = false;
+    bool sqrtMap = false;
+
+    QGraphicsScene *scene;
+    QGraphicsPixmapItem *pixImage;
+    QGraphicsPixmapItem *pixLabel;
+    QGraphicsPixmapItem *pixOptForest;
+    QGraphicsPixmapItem *pixSuperpixel;
+
+    unsigned int layers = 0;
+    unsigned int featStatus = 0;
+
+    QString imagePath;
+    QImage image;
+    QImage markerImg;
+    Markers *markers = nullptr;
+
+    bool cutAllocated = false;
+    segm::ForestingTransform *cut = nullptr;
+    SegmImg featImg;
+
+    segm::Image<int> *roots;
+    QImage *optForest;
+
+    float stdDev = 1.0;
+    int blurSize = 5;
+
+    segm::ISF superpixels;
+    int nSuperpixels = 500;
+    int itersSuperpixels = 5;
+    float alphaSuperpixels = 5.0;
+    float betaSuperpixels = 12.0;
+
+    QList<AuxiliaryWindow *> auxWindows;
+
+    QPen markerPen;
+    QPointF lastPoint;
+    int currentLabel = 1;
+
+    QString algorithm = "WaterCut";
+    QString mapping = "Cost";
+    FeatureSpace featSpace = Color;
+
+    // color space
+    SegmImg::ColorSpace colorSpace = SegmImg::rgb;
+
+    // EXPERIMENTS
+    ExperimentManager *expMan = nullptr;
+    double scribbledDist;
+
+private:
+    bool resetFeatImg();
+
+    void maybeDeleteCut();
+
+    void initPixMaps();
+
+    void drawForestOn(  QPointF &pos);
+    void trimForestOn(  QPointF &pos);
+    void drawLineTo(  QPointF &endPoint);
+    void drawLineTo(  QPointF &endPoint, int label);
+    void eraseLineIn();
+
+    void overlayLabel();
+
+    QImage mergeImages(  QImage &orig,   QImage &mask);
+
+    void setMarkerImage(  QGraphicsLineItem *item, int label);
+
+    QImage getMapping();
+
+    inline void addLayer(Layers layer) { layers |= layer; }
+    inline void removeLayer(Layers layer) { layers &= (~layer); }
+    inline void resetLayers() { layers = 0; }
+    inline bool isLayerActive(Layers layer) { return (bool)(layers & layer); }
+    inline void clearLayers(unsigned int layer);
+
+    inline void addFeatStatus(FeatureStatus status) { featStatus |= status; }
+    inline void removeFeatStatus(FeatureStatus status) { featStatus &= (~status); }
+    inline void resetFeatStatus() { featStatus = 0; }
+    inline bool isFeatStatus(FeatureStatus status) { return (bool)(featStatus & status); }
+
+    void updateAuxImagePtrs();
+
+    bool wasSegmentationExecuted();
+};
+
+#endif // IMAGO_ANNOTATIONAREA_H

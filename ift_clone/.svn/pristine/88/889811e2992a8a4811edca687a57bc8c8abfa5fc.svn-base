@@ -1,0 +1,21 @@
+#include "markers.h"
+
+Markers::Markers(QObject *parent) : QObject(parent)
+{
+    colors.push_back(qRgb(255, 51, 51));
+    colors.push_back(qRgb(102, 255, 255));
+    current_marker = 1;
+}
+
+void Markers::addMarker()
+{
+    current_marker = colors.size();
+    colors.push_back(qRgb(255, 255, 255));
+}
+
+bool Markers::setCurrent(int index)
+{
+    if (index >= colors.size()) return false;
+    current_marker = index;
+    return true;
+}

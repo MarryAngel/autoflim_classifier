@@ -1,0 +1,80 @@
+#include <QDir>
+#include <QString>
+#include "experimentmanager.h"
+
+#include <iostream>
+#include <sys/stat.h>
+
+ExperimentManager::ExperimentManager(  std::string &method_,
+                                       std::string &imageName_,
+                                       std::string &dir_ ,
+                                       std::string &dataPrefix_)
+{
+    dir = dir_;
+    dataPrefix = dataPrefix_;
+    method = method_;
+    imageName = basename(imageName_);
+    id = 0;
+}
+
+
+ExperimentManager::~ExperimentManager()
+{
+    fileStream.flush();
+    fileStream.close();
+}
+
+
+void ExperimentManager::init()
+{
+    QDir qdir(QString::fromStdString(dir));
+    if (!qdir.exists())
+        qdir.mkpath(".");
+
+    std::string filepath = dir + "/" + dataPrefix + imageName + ".csv";
+    struct stat buf;
+    bool exists = stat(filepath.c_str(), &buf) != -1;
+    fileStream.open(filepath, std::ofstream::app);
+    if (!exists)
+        fileStream << "action, distance, method, result_path" << std::endl;
+}
+
+
+void ExperimentManager::resetId()
+{
+    id = 0;
+}
+
+
+std::string ExperimentManager::write(  std::string &action)
+{
+    return write(action, "NA");
+}
+
+
+std::string ExperimentManager::write(  std::string &action, double dist)
+{
+    return write(action, std::to_string(dist));
+}
+
+
+std::string ExperimentManager::write(  std::string &action,   std::string &dist)
+{
+    std::string imgPath = dir + "/" + dataPrefix + method + "_" + imageName + "_" + std::to_string(id++) + ".pgm";
+    fileStream << action << "," << dist << "," << method << "," << imgPath << std::endl;
+    return imgPath;
+}
+
+
+std::string ExperimentManager::basename(std::string s)
+{
+      size_t last_slash = s.find_last_of("\\/");
+    if (std::string::npos != last_slash) {
+        s.erase(0, last_slash + 1);
+    }
+      size_t period = s.rfind('.');
+    if (std::string::npos != period) {
+        s.erase(period);
+    }
+    return s;
+}

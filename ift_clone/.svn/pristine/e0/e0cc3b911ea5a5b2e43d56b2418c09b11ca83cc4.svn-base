@@ -1,0 +1,67 @@
+#ifndef SEGM_FORESTINGTRANSFORM_H
+#define SEGM_FORESTINGTRANSFORM_H
+
+#include "datatypes/heap.h"
+#include "datatypes/image.h"
+
+namespace segm
+{
+    class ForestingTransform : public Image<float>
+    {
+
+    public:
+        ForestingTransform(int width, int height, int bands);
+        ForestingTransform(int width, int height, int bands,   float *feats);
+        explicit ForestingTransform(  Image<float> &image) :
+                ForestingTransform(image.getWidth(), image.getHeight(), image.getBands(), image.getFeats()) { }
+        ~ForestingTransform() override = default;
+
+        ForestingTransform &operator=(  ForestingTransform &forest);
+
+        void run(Image<int> &markers);
+
+        Image<float> getCost()  ;
+        Image<int> getRoot()  ;
+        Image<int> getPred()  ;
+        Image<int> getLabel()  ;
+        Image<int> getOrder()  ;
+        Image<int> getBorder()  ;
+
+        Image<int> getPredCount()  ;
+        Image<int> getLeafPredCount()  ;
+
+        Image<bool> getBranch(int index);
+        Image<bool> getBranch(int x, int y);
+
+        bool getExecuted()   { return executed; }
+
+        void trim(int index);
+        void trim(int x, int y);
+
+    public:
+
+        static   int nil = -1;
+
+    protected:
+
+        virtual void reset();
+        virtual void init(  Image<int> &markers);
+        virtual void updatePath(int) { };
+        virtual void conquer(int x, int y, int adj_x, int adj_y) = 0;
+
+    protected:
+
+        Heap heap;
+        Image<float> cost;
+        Image<int> root;
+        Image<int> pred;
+        Image<int> label;
+        Image<int> order;
+
+        bool executed = false;
+
+    };
+}
+
+
+#endif //SEGM_FORESTINGTRANSFORM_H

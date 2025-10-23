@@ -1,0 +1,74 @@
+
+#ifndef IMAGO_METRICLEARNWINDOW_H
+#define IMAGO_METRICLEARNWINDOW_H
+
+#include <QWidget>
+
+#include <Eigen/Dense>
+
+#include "annotationarea.h"
+#include "metriclearnengine.h"
+
+namespace Ui {
+    class MetricLearnWindow;
+}
+
+class MetricLearnWindow : public QWidget
+{
+    Q_OBJECT;
+
+public:
+    explicit MetricLearnWindow(QWidget *parent = nullptr);
+
+    void connectToArea(AnnotationArea *area) { annoArea = area; }
+
+private slots:
+    void getImageData();
+
+    void setDimOut(int dim) { dim_out = dim; }
+    void setIterations(int ite) { iterations = ite; }
+    void setKTargets(int k) { k_targets = k; }
+    void setLearnRate(double rate) { learn_rate = rate; }
+
+    void setMethod(  QString &str) { engine.setMethod(str); }
+
+    void plotPixels();
+    void plotMarkers();
+
+    void run();
+
+    void disableButtons();
+    void enableButtons();
+
+private:
+    Ui::MetricLearnWindow *ui;
+    MetricLearnEngine engine;
+    AnnotationArea *annoArea = nullptr;
+    QGraphicsScene *scene;
+
+    Eigen::MatrixXd train;
+    Eigen::VectorXi train_label;
+    Eigen::MatrixXd data;
+    Eigen::VectorXi data_label;
+    Eigen::MatrixXd L_data;
+
+    QVector<QRgb> colors;
+
+    int dim_out;
+    int iterations;
+    int k_targets;
+    double learn_rate;
+
+    bool dataLoaded = false;
+
+private:
+    void setUiBoxes();
+
+    void loadData(  segm::Image<float> &image,   segm::Image<int> &label,   segm::Image<int> &markers);
+
+    void plot(  Eigen::MatrixXd &data,   Eigen::VectorXi &label, bool increment);
+
+};
+
+
+#endif //IMAGO_NCAWINDOW_H

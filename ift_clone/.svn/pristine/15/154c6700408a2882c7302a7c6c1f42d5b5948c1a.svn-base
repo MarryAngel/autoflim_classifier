@@ -1,0 +1,37 @@
+
+#ifndef IMAGO_EXPERIMENTMANAGER_H
+#define IMAGO_EXPERIMENTMANAGER_H
+
+#include <fstream>
+#include <QString>
+
+class ExperimentManager
+{
+public:
+    ExperimentManager(  std::string &method_,
+                        std::string &imageName_,
+                        std::string &dir_ = "experiments",
+                        std::string &dataPrefix_ = "data_");
+
+    ~ExperimentManager();
+
+    void init();
+    void resetId();
+    std::string write(  std::string &action);
+    std::string write(  std::string &action, double dist);
+
+protected:
+    std::ofstream fileStream;
+    std::string dir;
+    std::string dataPrefix;
+    std::string method;
+    std::string imageName;
+    int id;
+
+    std::string write(  std::string &action,   std::string &dist);
+
+    std::string basename(std::string s)  ;
+};
+
+
+#endif //IMAGO_EXPERIMENTMANAGER_H

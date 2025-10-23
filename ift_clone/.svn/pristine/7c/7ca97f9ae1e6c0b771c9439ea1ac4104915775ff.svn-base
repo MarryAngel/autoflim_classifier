@@ -1,0 +1,31 @@
+
+#ifndef IMAGO_PWQTAPI_H
+#define IMAGO_PWQTAPI_H
+
+#include <QImage>
+#include "datatypes/image.h"
+
+extern "C" {
+#include "powerwatershed/PINK/mccodimage.h"
+#include "powerwatershed/PINK/mcimage.h"
+#include "powerwatershed/include/cccodimage.h"
+#include "powerwatershed/include/gageodesic.h"
+#include "powerwatershed/include/MSF_RW.h"
+};
+
+
+uint32_t * segmToPWWeights(  segm::Image<float> &image, /* IN : image feat */
+                           uint32_t * weights, /* OUT : array to store the values of weights on the edges */
+                           int ** edges,       /* IN : array of node indexes composing edges */
+                           int size_edges,
+                           int * seeds,        /* IN : array of seeded nodes indexes */
+                           int size_seeds,     /* IN : nb of seeded nodes */
+                           uint32_t * maxi,    /* OUT : the maximum weight value */
+                           bool quicksort);    /* IN : true : bucket sort used; false : stochastic sort */
+/* ================================================================================================================= */
+/* Computes weights inversely proportionnal to the image gradient for 2D color (ppm) images
+   Returns the normal weights and computes the reconstructed weights in the array weights */
+
+segm::Image<int> powerWatershed(  segm::Image<float> &image,   segm::Image<int> &markers);
+
+#endif //IMAGO_PWQTAPI_H
