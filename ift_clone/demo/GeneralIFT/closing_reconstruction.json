@@ -1,6 +1,0 @@
-{
-    "operator": "closing_reconstruction",
-    "input_image": "images/figure2.pgm",
-    "adjacency_radius": 25.0,
-    "output_image": "result.pgm"
-}

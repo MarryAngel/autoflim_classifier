@@ -1,4 +1,0 @@
-add_subdirectory(BrainAnomalyDetection)
-add_subdirectory(BrainAsymmetryAnalysis)
-add_subdirectory(SaliencyFramework)
-add_subdirectory(LargeMargin)

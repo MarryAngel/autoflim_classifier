@@ -1,7 +1,0 @@
-{
-    "operator": "superior_reconstruction",
-    "input_image": "images/figure1.pgm",
-    "criterion": "area",
-    "threshold": 2000,
-    "output_image": "result.pgm"
-}
