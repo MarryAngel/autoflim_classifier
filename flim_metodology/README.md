@@ -35,3 +35,10 @@ Para rodar os experimentos, a pasta build tem que conter:
  - seeds_files.txt
  - train.csv: arquivo csv com as imagens de treino que estão na pasta train1
  - svm_3_1.zip
+
+## Arquivos gerados quando testa
+ - layer3_test1_id_image.txt
+ - layer3_test1.zip
+ - layer3_tes1
+ - results_3_1
+ - confusion.csv
