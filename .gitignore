@@ -17,9 +17,9 @@ ENV/
 
 # Ignore all images in the datasets folders, except images for example
 baseline_networks/datasets/**/images/*
-flim_metodology/**/images/*
-flim_metodology/**/masks/*
-flim_metodology/**/build/*
+flim_metodology/**/build/images/*
+flim_metodology/**/build/masks/*
+# flim_metodology/**/build/*
 
 !baseline_networks/datasets/**/images/000001_00000001.png
 !baseline_networks/datasets/**/images/000002_00000001.png
@@ -31,25 +31,25 @@ flim_metodology/**/build/*
 !baseline_networks/datasets/**/images/000008_00000001.png
 !baseline_networks/datasets/**/images/000009_00000001.png
 
-!flim_metodology/**/**/images/000001_00000001.png
-!flim_metodology/**/**/images/000002_00000001.png
-!flim_metodology/**/**/images/000003_00000001.png
-!flim_metodology/**/**/images/000004_00000001.png
-!flim_metodology/**/**/images/000005_00000001.png
-!flim_metodology/**/**/images/000006_00000001.png
-!flim_metodology/**/**/images/000007_00000001.png
-!flim_metodology/**/**/images/000008_00000001.png
-!flim_metodology/**/**/images/000009_00000001.png
+!flim_metodology/**/images/000001_00000001.png
+!flim_metodology/**/images/000002_00000001.png
+!flim_metodology/**/images/000003_00000001.png
+!flim_metodology/**/images/000004_00000001.png
+!flim_metodology/**/images/000005_00000001.png
+!flim_metodology/**/images/000006_00000001.png
+!flim_metodology/**/images/000007_00000001.png
+!flim_metodology/**/images/000008_00000001.png
+!flim_metodology/**/images/000009_00000001.png
 
-!flim_metodology/**/**/masks/000001_00000001.png
-!flim_metodology/**/**/masks/000002_00000001.png
-!flim_metodology/**/**/masks/000003_00000001.png
-!flim_metodology/**/**/masks/000004_00000001.png
-!flim_metodology/**/**/masks/000005_00000001.png
-!flim_metodology/**/**/masks/000006_00000001.png
-!flim_metodology/**/**/masks/000007_00000001.png
-!flim_metodology/**/**/masks/000008_00000001.png
-!flim_metodology/**/**/masks/000009_00000001.png
+!flim_metodology/**/masks/000001_00000001.png
+!flim_metodology/**/masks/000002_00000001.png
+!flim_metodology/**/masks/000003_00000001.png
+!flim_metodology/**/masks/000004_00000001.png
+!flim_metodology/**/masks/000005_00000001.png
+!flim_metodology/**/masks/000006_00000001.png
+!flim_metodology/**/masks/000007_00000001.png
+!flim_metodology/**/masks/000008_00000001.png
+!flim_metodology/**/masks/000009_00000001.png
 
 # IDE
 .vscode/
