@@ -3,31 +3,31 @@
 
 ## Organization
 <!-- Capturar a organização da pasta: tree -L 5 -I "ift|__pycache__|*.pyc" flim_classification (executar em Documents) -->
-```bash
-flim_classification
-├── baselines_networks                  # 
-│   ├── datasets                        # Datasets used in base networks
-│   │   ├── cistos                      #
-│   │   │   ├── images/                 # 
-│   │   │   ├── label/                  #
-│   │   │   ├── splits/                 #   
-│   │   │   ├── splits_incremental/     #
-│   │   ├── eggs                        #
-│   │   ├── larvae                      #
-│   ├── notebooks                       #    
-│   ├── src                             #
-├── flim_metodology                     #
-│   ├── cistos                          #
-│   ├── eggs                            #
-│   ├── larvae                          #
-│   ├── notebooks                       #
-│   └── src                             #
-├── .gitignore                          # Git ignore configuration
-├── requirements.txt                    # Project dependencies
-├── README.md                           # Project documentation 
-└── LICENSE                             # Project license
-```
 
+```bash
+    flim_classification
+    ├── baselines_networks                  # Baseline models and main experiments
+    │   ├── datasets                        # Datasets used in base networks
+    │   │   ├── cistos                      # Data related to cyst parasites
+    │   │   │   ├── images/                 # Original input images
+    │   │   │   ├── label/                  # Corresponding masks/labels
+    │   │   │   ├── splits/                 # Fixed train/test splits
+    │   │   │   ├── splits_incremental/     # Progressive splits for incremental experiment
+    │   │   ├── eggs                        # Equivalent structure for eggs
+    │   │   ├── larvae                      # Equivalent structure for larvae
+    │   ├── notebooks                       # Jupyter notebooks for training, analysis and testing    
+    │   ├── src                             # Implementation of models and utilities
+    ├── dataset                             # Compressed parasites dataset
+    ├── flim_metodology                     # FLIM-based convoluctional encoder
+    │   ├── cistos                          # Experiments related to cyst parasites
+    │   ├── eggs                            # Experiments related to eggs
+    │   ├── larvae                          # Experiments related to larvae
+    │   └── src                             # Implementation of FLIM-based encoder and utilities
+    ├── .gitignore                          # Git ignore configuration
+    ├── requirements.txt                    # Project dependencies
+    ├── README.md                           # Project documentation 
+    └── LICENSE                             # Project license
+```
 
 ## Dataset
 
