@@ -21,24 +21,23 @@ DATASETS = {
 # ==================== FUNCTIONS ====================
 
 def get_dataset_paths(dataset_name):
-    """Returns paths for a specific dataset.
-
-    Args:
-        dataset_name (str): The name of the dataset ('cistos', 'eggs', or 'larvae').
-
-    Returns:
-        Path: The path to the dataset.
-    """
+    """Returns paths for a specific dataset"""
     
     if dataset_name not in DATASETS:
         raise ValueError(f"Dataset '{dataset_name}' not found. Available: {list(DATASETS.keys())}")
     
     dataset_root = DATASETS[dataset_name]
-    print(f"{dataset_root=}")
     
     return {
         'root': dataset_root,
         'images': dataset_root / 'images',
         'splits': dataset_root / 'splits',
-        'splits_': dataset_root / 'splits_incremental'  # Added splits_ path
+        'splits_incremental': dataset_root / 'splits_incremental'  
     }
+    
+def get_split_path_incremental(dataset_name, split, percentage):
+    """Returns the full path of an incremental split file."""
+    
+    path_name = get_dataset_paths(dataset_name)
+    path_json = f"{path_name['splits_incremental']}/split{split}/data_descriptor_perc{percentage}.json"
+    return path_json

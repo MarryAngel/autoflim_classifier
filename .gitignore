@@ -15,11 +15,30 @@ ENV/
 .ipynb_checkpoints
 *.ipynb_checkpoints/
 
+# IDE
+.vscode/
+
+# Library
+ift_clone/
+
+# .idea/
+# *.swp
+# *.swo
+
+# # OS
+# .DS_Store
+# Thumbs.db
+
+# # Results and outputs
+# *.log
+# results/
+# outputs/
+# checkpoints/
+
 # Ignore all images in the datasets folders, except images for example
 baseline_networks/datasets/**/images/*
 flim_metodology/**/build/images/*
 flim_metodology/**/build/masks/*
-# flim_metodology/**/build/*
 
 !baseline_networks/datasets/**/images/000001_00000001.png
 !baseline_networks/datasets/**/images/000002_00000001.png
@@ -51,22 +70,14 @@ flim_metodology/**/build/masks/*
 !flim_metodology/**/masks/000008_00000001.png
 !flim_metodology/**/masks/000009_00000001.png
 
-# IDE
-.vscode/
+flim_metodology/**/build/bag
+flim_metodology/**/build/flim
+flim_metodology/**/build/superpixels
+flim_metodology/**/build/layer*
+flim_metodology/**/build/svm*
+flim_metodology/**/build/seeds*
+flim_metodology/**/build/results*
+flim_metodology/**/build/confusion.csv
 
-# Library
-ift_clone/
-
-# .idea/
-# *.swp
-# *.swo
-
-# # OS
-# .DS_Store
-# Thumbs.db
-
-# # Results and outputs
-# *.log
-# results/
-# outputs/
-# checkpoints/
+# Other Folder
+extras/
