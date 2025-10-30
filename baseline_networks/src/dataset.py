@@ -46,6 +46,7 @@ class DatasetParasite(Dataset):
         path = self.samples[idx]
         img_name = os.path.basename(path)
         label = int(img_name.split("_")[0])
+        label -= 1
         img = pil_loader(path)
         
         if self.transform:
