@@ -30,10 +30,11 @@ ift_clone/
 # Thumbs.db
 
 # # Results and outputs
-# *.log
-# results/
-# outputs/
-# checkpoints/
+*.log
+*.pth
+results/
+outputs/
+checkpoints/
 
 # Ignore all images in the datasets folders, except images for example
 baseline_networks/datasets/**/images/*
