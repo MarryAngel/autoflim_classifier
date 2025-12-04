@@ -68,6 +68,8 @@ with open("seeds_files.txt", "r") as f:
 cmd = f"iftConvertImagesToMImages train{split}.csv layer0"
 os.system(cmd)
 
+# adicionar iftSelectBoFP [não precisa renomear -fpts.txt]
+
 # Create layer directories and flim directory
 for i in range(1, layer + 1):
     cmd = f"iftCreateLayerModel bag arch2D.json {i} flim"

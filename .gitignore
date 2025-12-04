@@ -19,7 +19,7 @@ ENV/
 .vscode/
 
 # Library
-ift_clone/
+ift/
 
 # .idea/
 # *.swp

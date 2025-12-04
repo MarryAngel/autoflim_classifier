@@ -3,4 +3,4 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
-make IFT_GPU=$1 iftCreateSortedLayerModel
+make IFT_GPU=$1 iftCreateSortedLayerModel iftSelectBoFP

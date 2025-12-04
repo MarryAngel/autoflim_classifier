@@ -39,6 +39,22 @@ Unlike the original split provided by the repository, our experiments employ thr
 
 ## Libraries installation
 
+Para utilizar a biblioteca IFT, realize o seguinte procedimento:
+1. Abra o terminal na pasta `ift`  (eu renomeei de `svnift` para `ift`) e dê um  `make`  no terminal. Após isso a biblioteca será compilada e aparecerá no final a mensagem “*libift.a built … //  DONE.*” Caso queira rodar com GPU, execute o seguinte comando: `IFT_GPU=1 make`
+    Pode ser que seja necessário executar `sudo apt install nvidia-cuda-toolkit` para ter o nvcc e `sudo apt install libatlas-base-dev`
+2. Agora vamos arrumar o arquivo `.bashrc` . Para isso, no terminal digite `nano ~/.bashrc` . Vai até o final do arquivo que aparecerá no terminal e adicione as seguintes linhas, lembrando de alterar o caminho do diretório da ift. Após aplicar as alterações, salve o arquivo e digite no terminal `source ~/.bashrc`  para atualizar o arquivo. Se quiser pode fechar e reabrir o terminal por garantia que as novas configurações serão aplicadas.
+
+#ift
+export PATH=$PATH:/data_lids/home/maria/Documents/ift/bin
+export NEWIFT_DIR=/data_lids/home/maria/Documents/ift
+export IFT_DIR=/data_lids/home/maria/Documents/ift
+#export IFT_GPU=1
+
+3. após ter compilado, execute o arquivo compile.sh no terminal da seguinte forma: ./compile.sh all (caso precise, compile ele com o comando chmod +x compile.sh)
+
+4. caso a compilação tenha dado certo, diversos programas irão aparecer dentro da pasta ift/bin
+
+
 ## Instalation
 
 ### Local Setup
