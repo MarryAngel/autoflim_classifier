@@ -1,12 +1,30 @@
 import os
+import sys
 import shutil
 from tqdm import tqdm
 
-dataset_name = 'cistos'
-num_classes = 6
+# Receive input parameters
+if len(sys.argv) != 2:
+    print("Usage: python exp_nimages_random.py <dataset_name>")
+    print("Datasets available: eggs, larvae, cistos")
+    exit()
+    
+dataset_name = str(sys.argv[1])
+
+if dataset_name not in ['eggs', 'larvae', 'cistos']:
+    print(f"Dataset {dataset_name} not recognized. Available datasets: eggs, larvae, cistos.")
+    exit()
+elif dataset_name == 'eggs':
+    num_classes = 8
+    nsuperpixels = [25, 50]
+elif dataset_name == 'larvae':
+    num_classes = 2
+    nsuperpixels = [25, 50, 150,200]
+elif dataset_name == 'cistos':
+    num_classes = 6
+    nsuperpixels = [25, 50]
+
 splits = [1, 2, 3]
-# nsuperpixels = [25, 50]
-nsuperpixels = [200]
 img_per_class_init = 1
 img_per_class_final = 5
 seed = 42
@@ -16,7 +34,7 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 src_dir = os.path.join(base_dir, 'src')
 dataset_dir = os.path.join(base_dir, dataset_name)
 build_dir = os.path.join(dataset_dir, 'build')
-output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'extras', 'exp', dataset_name, 'nimages_euclidean_noredution'))
+output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'extras', 'exp', dataset_name, 'nimages_cossine_noredution'))
 
 
 def mover_resultados(split, num_superpixel, nimage):
@@ -50,7 +68,7 @@ def adicionar_imagem_e_retreinar(dataset_name, num_classes, split, num_superpixe
     p1 = f"{dataset_name}/build/layer3_train{split}.zip"
     p2 = f"{dataset_name}/build/train.csv"
     p3 = f"{dataset_name}/build/misclassified.csv"
-    p4 = 1
+    p4 = 0
     os.system(f"iftPrototypeEvaluation {p1} {p2} {p3} {p4}")
     
     # Adicionar imagem

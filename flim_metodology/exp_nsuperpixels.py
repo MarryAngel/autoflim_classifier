@@ -1,11 +1,25 @@
 import os
-import subprocess
+import sys
 import shutil
-from tqdm import tqdm
-import time
 
-dataset_name = 'eggs'
-num_classes = 8
+# Receive input parameters
+if len(sys.argv) != 2:
+    print("Usage: python nsuperpixels.py <dataset>>")
+    print("Datasets available: eggs, larvae, cistos")
+    exit()
+    
+dataset_name = str(sys.argv[1])
+
+if dataset_name not in ['eggs', 'larvae', 'cistos']:
+    print(f"Dataset {dataset_name} not recognized. Available datasets: eggs, larvae, cistos.")
+    exit()
+elif dataset_name == 'eggs':
+    num_classes = 8
+elif dataset_name == 'larvae':
+    num_classes = 2
+elif dataset_name == 'cistos':
+    num_classes = 6
+    
 split = [1,2,3]
 nsuperpixels = [5, 15, 25, 50, 75, 100, 150, 200]
 seed = 42
