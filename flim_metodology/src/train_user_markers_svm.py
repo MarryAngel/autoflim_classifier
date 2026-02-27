@@ -3,17 +3,17 @@ import sys
 
 # Receive input parameters
 if len(sys.argv) != 5:
-    print("Usage: python train_flim_svm.py <dataset> <last_encoder_layer> <split> <num_superpixels>")
+    print("Usage: python train_marker_user_svm.py <dataset> <last_encoder_layer> <split> <reduction_markers>")
     print("Datasets available: eggs, larvae, ...")
     print("last_encoder_layer: Last encoder layer (int)")
     print("split: Split number (int)")
-    print("num_superpixels: Number of superpixels (int)")
+    print('reduction markers: true (center pixel) or false (all markers)')
     exit()
     
 dataset_name = str(sys.argv[1])
 layer = int(sys.argv[2])
 split = int(sys.argv[3])
-num_superpixels = int(sys.argv[4])
+reduction_markers = sys.argv[4].lower()
 
 # Set build directory and change working directory
 build_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', dataset_name, 'build'))
@@ -23,33 +23,47 @@ os.chdir(build_dir)
 cmd = f"rm -rf bag flim layer[0-{layer}] layer{layer}_train{split} superpixels train.csv seeds_files.txt"
 os.system(cmd)
 
-# Create train.csv with selected images in train{split} folder
-cmd = f"ls -v train{split}/* >> train.csv"
-os.system(cmd)
+# retrieve the manual markings in dir_marker and copy to bag folder
+if not os.path.exists("bag"):
+    os.makedirs("bag")
 
-# Create superpixels for selected images
-with open("train.csv", "r") as f:
-    for line in f:
-        print(line)
-        file_in = line.strip()
-        basename = file_in.split("/")[1].split(".")[0]
-        ext = file_in.split("/")[1].split(".")[1].strip()
-        print(f"Processing {basename}")
-        file_out = f"superpixels/{basename}.{ext}"
-        file_mask = f"masks/{basename}.{ext}"
-        if os.path.exists("./masks"):
-            print("Using masks")
-            # iftDISF <input image> <initial seeds> <final superpixels> <output label image> <mask image>
-            cmd = f"iftDISF {file_in} 1000 {num_superpixels} {file_out} {file_mask}"
-        else:
-            # iftDISF <input image> <initial seeds> <final superpixels> <output label image>
-            cmd = f"iftDISF {file_in} 1000 {num_superpixels} {file_out}"
-        os.system(cmd)
+# list files in dir_marker
+dir_marker = f"../../../flim_builder/{dataset_name}/split{split}"
 
-# Create bag directory with superpixel centers
-# iftSeedsFromSuperpixels <superpixel images dir> <output seeds dir> <seed type> <connectivity>
-cmd = "iftSeedsFromSuperpixels superpixels bag 1"
-os.system(cmd)
+# copy files from dir_marker to bag
+for file in os.listdir(dir_marker):
+    if file.endswith("-seeds.txt"):
+        src = os.path.join(dir_marker, file)
+        dst = os.path.join("bag", file)
+        os.system(f"cp {src} {dst}")
+
+# open each file in bag to reduce the number of points
+if reduction_markers == 'true':
+    for file in os.listdir("bag"):
+        # open the txt file and read the lines
+        if file.endswith("-seeds.txt"):
+            all_lines = []
+            with open(os.path.join("bag", file), "r") as f:
+                all_lines = f.readlines()
+            qtd_markers, dim1, dim2 = all_lines[0].split(" ")
+            # reduce the number of markers to 1 (center pixel)
+            data_lines = all_lines[1:]
+            groups = {}
+            for i in range(0, len(data_lines), 5):
+                idx = i//5+1
+                group = data_lines[i:i+5]
+                if len(group) >= 3:
+                    groups[idx] = tuple(int(x) for x in group[2].split())
+                else:
+                    groups[idx] = None
+            # rewrite the file with the new number of markers and the center pixel information
+            new_qtd_markers = len(groups)
+            with open(os.path.join("bag", file), "w") as f:
+                f.write(f"{new_qtd_markers} {dim1} {dim2}")
+                for idx, info in groups.items():
+                    if info is not None:
+                        f.write(f"{info[0]} {info[1]} {info[2]} {info[3]} {info[4]}\n")
+
 
 # Create seeds_files.txt with files in bag directory
 cmd = "ls -v bag >> seeds_files.txt"

@@ -7,6 +7,7 @@ __pycache__/
 *.so
 .Python
 venv/
+venvift/
 env/
 ENV/
 .venv
@@ -40,6 +41,7 @@ checkpoints/
 baseline_networks/datasets/**/images/*
 flim_metodology/**/build/images/*
 flim_metodology/**/build/masks/*
+flim_metodology/**/build/*
 
 !baseline_networks/datasets/**/images/000001_00000001.png
 !baseline_networks/datasets/**/images/000002_00000001.png
@@ -79,6 +81,16 @@ flim_metodology/**/build/svm*
 flim_metodology/**/build/seeds*
 flim_metodology/**/build/results*
 flim_metodology/**/build/confusion.csv
+
+# Ignore output models
+baseline_networks/notebooks/efficientnet
+baseline_networks/notebooks/efficientnetv2
+baseline_networks/notebooks/mobilenetv2
+baseline_networks/notebooks/mobilenetv3_small
+baseline_networks/notebooks/resnet18
+baseline_networks/notebooks/shufflenetv2
+baseline_networks/notebooks/squeezenet
+baseline_networks/notebooks/vgg16
 
 # Other Folder
 extras/
