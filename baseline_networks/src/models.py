@@ -62,7 +62,32 @@ MODEL_REGISTRY = {
         'weights': models.MobileNet_V3_Small_Weights.IMAGENET1K_V1,
         'classifier_layer': ('classifier', 3),
         'in_features': 1024       
+    },
+    'efficientnetb0': {
+        'model_fn': models.efficientnet_b0,
+        'weights': models.EfficientNet_B0_Weights.IMAGENET1K_V1,
+        'classifier_layer': ('classifier', 1),
+        'in_features': 1280
+    },
+    'efficientnetv2s': {
+        'model_fn': models.efficientnet_v2_s,
+        'weights': models.EfficientNet_V2_S_Weights.IMAGENET1K_V1,
+        'classifier_layer': ('classifier', 1),
+        'in_features': 1280
+    },
+    'mobilenetv2': {
+        'model_fn': models.mobilenet_v2,
+        'weights': models.MobileNet_V2_Weights.IMAGENET1K_V1,
+        'classifier_layer': ('classifier', 1),
+        'in_features': 1280
+    },
+    'shufflenetv2': {
+        'model_fn': models.shufflenet_v2_x1_0,
+        'weights': models.ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1,
+        'classifier_layer': ('fc', None),
+        'in_features': 1024
     }
+    
 }
 
 def _replace_classifier(model, model_info, num_classes):
@@ -78,7 +103,7 @@ def _replace_classifier(model, model_info, num_classes):
             # Para modelos como VGG (classifier é um Sequential)
             getattr(model, layer_name)[layer_idx] = nn.Linear(in_features, out_features=num_classes)
     else:
-        # Para modelos como ResNet (fc é uma camada única)
+        # Para modelos como ResNet e ShuffleNet(fc é uma camada única)
         setattr(model, layer_name, nn.Linear(in_features, num_classes))
     
     return model

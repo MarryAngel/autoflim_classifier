@@ -94,3 +94,33 @@ baseline_networks/notebooks/vgg16
 
 # Other Folder
 extras/
+others/
+
+# Ignore all images in the datasets folders, except images for example -> corrected
+datasets/**/images/*
+datasets/**/masks/*
+
+!datasets/**/images/000001_00000001.png
+!datasets/**/images/000002_00000001.png
+!datasets/**/images/000003_00000001.png
+!datasets/**/images/000004_00000001.png
+!datasets/**/images/000005_00000001.png
+!datasets/**/images/000006_00000001.png
+!datasets/**/images/000007_00000001.png
+!datasets/**/images/000008_00000001.png
+!datasets/**/images/000009_00000001.png
+
+!datasets/**/masks/000001_00000001.png
+!datasets/**/masks/000002_00000001.png
+!datasets/**/masks/000003_00000001.png
+!datasets/**/masks/000004_00000001.png
+!datasets/**/masks/000005_00000001.png
+!datasets/**/masks/000006_00000001.png
+!datasets/**/masks/000007_00000001.png
+!datasets/**/masks/000008_00000001.png
+!datasets/**/masks/000009_00000001.png
+
+flim_metodology/src/filter_selection/
+flim_metodology/reduction_ovos/
+
+.vscode/

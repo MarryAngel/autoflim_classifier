@@ -24,9 +24,10 @@ elif dataset_name == 'cistos':
     num_classes = 6
     nsuperpixels = [25, 50]
 
-splits = [1, 2, 3]
+# splits = [1, 2, 3]
+splits = [1]
 img_per_class_init = 1
-img_per_class_final = 5
+img_per_class_final = 2
 seed = 42
 
 # Get absolute directories
@@ -35,7 +36,6 @@ src_dir = os.path.join(base_dir, 'src')
 dataset_dir = os.path.join(base_dir, dataset_name)
 build_dir = os.path.join(dataset_dir, 'build')
 output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'extras', 'exp', dataset_name, 'nimages_cossine_noredution'))
-
 
 def mover_resultados(split, num_superpixel, nimage):
     """Move os resultados para a pasta de output"""
