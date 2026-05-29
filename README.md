@@ -7,17 +7,19 @@
 ```bash
     flim_classification
     ├── baselines_networks                  # Baseline models and main experiments
-    │   ├── datasets                        # Datasets used in base networks
-    │   │   ├── cistos                      # Data related to cyst parasites
-    │   │   │   ├── images/                 # Original input images
-    │   │   │   ├── label/                  # Corresponding masks/labels
-    │   │   │   ├── splits/                 # Fixed train/test splits
-    │   │   │   ├── splits_incremental/     # Progressive splits for incremental experiment
-    │   │   ├── eggs                        # Equivalent structure for eggs
-    │   │   ├── larvae                      # Equivalent structure for larvae
     │   ├── notebooks                       # Jupyter notebooks for training, analysis and testing    
     │   ├── src                             # Implementation of models and utilities
-    ├── dataset                             # Compressed parasites dataset
+    ├── datasets                            # Datasets used in this work
+    │   ├── cysts                           # Data related to cysts parasites                       
+    │   │   ├── images/                     # Original input images
+    │   │   ├── label/                      # Corresponding masks/labels
+    │   │   ├── splits/                     # Fixed train/test splits
+    │   │   ├── splits_incremental/         # Progressive splits for incremental experiment
+    │   ├── eggs                            # Equivalent structure for eggs
+    │   ├── larvae                          # Equivalent structure for larvae
+    │   ├── datasets_parasites.zip          # Compressed parasites dataset
+    │   ├── run_splits.py                   # Created all splits
+    │   ├── split_dataset.py                # Created splits
     ├── flim_metodology                     # FLIM-based convoluctional encoder
     │   ├── cistos                          # Experiments related to cyst parasites
     │   ├── eggs                            # Experiments related to eggs

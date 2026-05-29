@@ -1,0 +1,7 @@
+todo os três datasets estão organizados na pasta datasets
+    imagem original segmentada
+    máscara binária 
+    split (3 repartições)
+    split_incrimental (3 repartições variando de 1-5%-25%-50%-75%-100%)
+
+pasta baseline_networks

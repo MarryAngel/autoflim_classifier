@@ -1,44 +1,31 @@
-# Libraries and configurations
-import sys
-from pathlib import Path
-import json
+"""
+Model creation and management module for parasite classification.
 
-# PyTorch
+This module provides utilities for creating and configuring pre-trained
+neural network models with custom classification heads.
+"""
+
+import os
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
-from torchvision import transforms
-from torchinfo import summary
 
-# Visualization and analysis
-import os
-import seaborn as sns
-import PIL
-import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import pandas as pd
-from sklearn.metrics import confusion_matrix, classification_report
-from sklearn.metrics import cohen_kappa_score
 
-from src.dataset import DataModuleParasite
-from src import utils
+# ==================== MODEL REGISTRY ====================
 
-# Adds the project root to the path
-project_root = Path.cwd().parent
-sys.path.insert(0, str(project_root))
-
-from config import (
-    get_dataset_paths
-)
-
-seed = 42
-torch.manual_seed(seed)
-np.random.seed(seed)
-
-# Dicionário com os modelos disponíveis e seus pesos pré-treinados
 MODEL_REGISTRY = {
+    """
+    Registry of supported neural network architectures.
+    
+    Each entry contains:
+    - model_fn: torchvision model constructor function
+    - weights: pre-trained weights from ImageNet1K
+    - classifier_layer: tuple of (module_name, layer_index)
+    - in_features: input features to the classification layer
+    """
     'vgg16': {
         'model_fn': models.vgg16,
         'weights': models.VGG16_Weights.IMAGENET1K_V1,
@@ -57,11 +44,11 @@ MODEL_REGISTRY = {
         'classifier_layer': ('classifier', 1),  # Conv2d layer
         'in_features': 512
     },
-    'mobilenetv3_small':{
-        'model_fn':  models.mobilenet_v3_small,
+    'mobilenetv3_small': {
+        'model_fn': models.mobilenet_v3_small,
         'weights': models.MobileNet_V3_Small_Weights.IMAGENET1K_V1,
         'classifier_layer': ('classifier', 3),
-        'in_features': 1024       
+        'in_features': 1024
     },
     'efficientnetb0': {
         'model_fn': models.efficientnet_b0,
@@ -87,74 +74,213 @@ MODEL_REGISTRY = {
         'classifier_layer': ('fc', None),
         'in_features': 1024
     }
-    
 }
 
-def _replace_classifier(model, model_info, num_classes):
-    """Substitui a camada de classificação do modelo."""
+
+# ==================== HELPER FUNCTIONS ====================
+
+def _replace_classifier(model: nn.Module, model_info: dict, num_classes: int) -> nn.Module:
+    """
+    Replace the classification head of a pre-trained model.
+
+    This function modifies the final layer of a neural network to output
+    predictions for a custom number of classes instead of ImageNet's 1000.
+
+    Parameters
+    ----------
+    model : nn.Module
+        Pre-trained PyTorch model.
+    model_info : dict
+        Model metadata from MODEL_REGISTRY containing:
+        - classifier_layer: (module_name, layer_index)
+        - in_features: input dimension to the classifier
+        - model_fn: original model constructor function
+    num_classes : int
+        Number of output classes for the new task.
+
+    Returns
+    -------
+    nn.Module
+        Model with modified classification head.
+
+    Notes
+    -----
+    Handles different classifier architectures:
+    - Sequential modules (VGG): modify specific layer by index
+    - SqueezeNet: uses Conv2d instead of Linear for classification
+    - Single layer (ResNet, ShuffleNet): replace entire layer
+    """
     layer_name, layer_idx = model_info['classifier_layer']
     in_features = model_info['in_features']
-    
+
     if layer_idx is not None:
+        # Handle Sequential modules (VGG, MobileNet, etc.)
         if model_info['model_fn'] == models.squeezenet1_1:
-            # Para squeezenet, a camada de classificação é uma Conv2d, então precisamos usar nn.Conv2d ao invés de nn.Linear
-            getattr(model, layer_name)[layer_idx] = nn.Conv2d(in_features, num_classes, kernel_size=(1,1), stride=(1,1))
+            # SqueezeNet uses Conv2d for classification
+            getattr(model, layer_name)[layer_idx] = nn.Conv2d(
+                in_features, num_classes, kernel_size=(1, 1), stride=(1, 1)
+            )
         else:
-            # Para modelos como VGG (classifier é um Sequential)
-            getattr(model, layer_name)[layer_idx] = nn.Linear(in_features, out_features=num_classes)
+            # Other models with sequential classifiers (VGG)
+            getattr(model, layer_name)[layer_idx] = nn.Linear(
+                in_features, out_features=num_classes
+            )
     else:
-        # Para modelos como ResNet e ShuffleNet(fc é uma camada única)
+        # Handle single Linear layer (ResNet, ShuffleNet, etc.)
         setattr(model, layer_name, nn.Linear(in_features, num_classes))
-    
+
     return model
 
-def create_model(type_model, description_path=None, config=None, pre_trained=False):
-    """
-    Cria uma instância do modelo especificado.
-    
-    Args:
-        model_name: Nome do modelo ('vgg16', 'resnet50', etc.)
-        description_path: Caminho para salvar a descrição do modelo
-        config: Dicionário com configurações (num_classes, device, lr)
-        pre_trained: Se True, carrega pesos da ImageNet
-    
-    Returns:
-        model, criterion, optimizer, scheduler
-    """
-    if type_model not in MODEL_REGISTRY:
-        raise ValueError(f"Modelo '{type_model}' não suportado. "
-                        f"Opções: {list(MODEL_REGISTRY.keys())}")
 
-    model_info = MODEL_REGISTRY[type_model]
+def _save_model_description(
+    model: nn.Module,
+    type_model: str,
+    pre_trained: bool,
+    description_path: str
+) -> None:
+    """
+    Save model architecture and parameter information to a file.
 
-    # Criar modelo com ou sem pesos pré-treinados
-    if pre_trained:
-        model = model_info['model_fn'](weights=model_info['weights'])
-    else:
-        model = model_info['model_fn'](weights=None)
-    
-    # Substituir camada de classificação
-    model = _replace_classifier(model, model_info, config['num_classes'])
-    model = model.to(config['device'])
-    
-    # Contar parâmetros
+    Parameters
+    ----------
+    model : nn.Module
+        PyTorch model to describe.
+    type_model : str
+        Model architecture name.
+    pre_trained : bool
+        Whether pre-trained weights were used.
+    description_path : str
+        Full path where to save the description file.
+    """
+    os.makedirs(os.path.dirname(description_path), exist_ok=True)
+
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # Salvar descrição do modelo
-    if description_path:
-        os.makedirs(os.path.dirname(description_path), exist_ok=True)
-        with open(description_path, "w") as f:
-            f.write(f"Model: {type_model}\n")
-            f.write(f"Pre-trained: {pre_trained}\n")
-            f.write(f"Total parameters: {total_params}\n")
-            f.write(f"Trainable parameters: {trainable_params}\n")
-            f.write(f"Model Architecture:\n{model}\n")
-    
-    # Loss, Optimizer e Scheduler
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=config['lr'])
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-    
-    return model, criterion, optimizer, scheduler
+    with open(description_path, "w") as f:
+        f.write(f"Model: {type_model}\n")
+        f.write(f"Pre-trained: {pre_trained}\n")
+        f.write(f"Total parameters: {total_params:,}\n")
+        f.write(f"Trainable parameters: {trainable_params:,}\n")
+        f.write(f"\nModel Architecture:\n")
+        f.write(f"{model}\n")
 
+
+# ==================== MAIN FUNCTION ====================
+
+def create_model(
+    type_model: str,
+    description_path: str = None,
+    config: dict = None,
+    pre_trained: bool = False
+) -> tuple:
+    """
+    Create a neural network model with custom classification head.
+
+    Loads a pre-trained architecture from torchvision (optionally), replaces
+    the classification layer for the target number of classes, and prepares
+    training utilities (criterion, optimizer, scheduler).
+
+    Parameters
+    ----------
+    type_model : str
+        Architecture name. Must be a key in MODEL_REGISTRY.
+        Supported: 'vgg16', 'resnet18', 'squeezenet', 'mobilenetv3_small',
+                   'efficientnetb0', 'efficientnetv2s', 'mobilenetv2', 'shufflenetv2'
+    description_path : str, optional
+        Path to save model architecture and parameter details.
+        If None, no description file is created.
+    config : dict, optional
+        Configuration dictionary containing:
+        - num_classes (int): Number of output classes
+        - device (str): Device to place model ('cuda', 'cpu')
+        - lr (float): Learning rate for optimizer
+    pre_trained : bool, optional
+        If True, loads ImageNet pre-trained weights (default: False).
+
+    Returns
+    -------
+    tuple
+        (model, criterion, optimizer, scheduler) where:
+        - model (nn.Module): Neural network on specified device
+        - criterion (nn.Module): CrossEntropyLoss
+        - optimizer (optim.Optimizer): Adam optimizer
+        - scheduler (optim.lr_scheduler): StepLR scheduler
+
+    Raises
+    ------
+    ValueError
+        If type_model is not in MODEL_REGISTRY.
+    KeyError
+        If config missing required keys ('num_classes', 'device', 'lr').
+
+    Examples
+    --------
+    >>> config = {
+    ...     'num_classes': 9,
+    ...     'device': 'cuda',
+    ...     'lr': 0.001
+    ... }
+    >>> model, criterion, optimizer, scheduler = create_model(
+    ...     type_model='shufflenetv2',
+    ...     config=config,
+    ...     pre_trained=True
+    ... )
+    >>> print(model)
+    ShuffleNet(...)
+    """
+    # Validate model type
+    if type_model not in MODEL_REGISTRY:
+        raise ValueError(
+            f"Model '{type_model}' not supported. "
+            f"Available options: {list(MODEL_REGISTRY.keys())}"
+        )
+
+    # Validate config
+    if config is None:
+        raise ValueError("config dictionary is required")
+    
+    required_keys = {'num_classes', 'device', 'lr'}
+    missing_keys = required_keys - set(config.keys())
+    if missing_keys:
+        raise KeyError(f"config missing required keys: {missing_keys}")
+
+    # Retrieve model metadata
+    model_info = MODEL_REGISTRY[type_model]
+
+    # ==================== Create Model ====================
+    if pre_trained:
+        # Load with ImageNet pre-trained weights
+        model = model_info['model_fn'](weights=model_info['weights'])
+    else:
+        # Create model from scratch (random initialization)
+        model = model_info['model_fn'](weights=None)
+
+    # Replace classification layer
+    model = _replace_classifier(model, model_info, config['num_classes'])
+
+    # Move model to target device
+    model = model.to(config['device'])
+
+    # ==================== Save Description ====================
+    if description_path:
+        _save_model_description(
+            model=model,
+            type_model=type_model,
+            pre_trained=pre_trained,
+            description_path=description_path
+        )
+
+    # ==================== Training Setup ====================
+    # Loss function for multi-class classification
+    criterion = nn.CrossEntropyLoss()
+
+    # Adam optimizer
+    optimizer = optim.Adam(model.parameters(), lr=config['lr'])
+
+    # Learning rate scheduler: reduce LR by 0.1 every 10 epochs
+    scheduler = optim.lr_scheduler.StepLR(
+        optimizer, step_size=10, gamma=0.1
+    )
+
+    return model, criterion, optimizer, scheduler
