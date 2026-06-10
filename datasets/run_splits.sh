@@ -3,7 +3,7 @@
 echo "Starting dataset splitting process..."
 
 # Define the list of datasets
-DATASETS=("cysts" "eggs" "larvae" "test")
+DATASETS=("cysts" "eggs" "larvae")
 
 # Define common parameters
 NUM_SPLITS=3
