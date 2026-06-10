@@ -313,9 +313,9 @@ def train_loop(
 
         # Iterate over all k-fold splits
         for split in config['split']:
-            print(f"\n{'='*60}")
-            print(f"Training: Split {split} | Percentage {perc}%")
-            print(f"{'='*60}")
+            # print(f"\n{'='*60}")
+            # print(f"Training: Split {split} | Percentage {perc}%")
+            # print(f"{'='*60}")
 
             # Create fresh model for this split+percentage combination
             base_model, criterion, optimizer, scheduler = models.create_model(

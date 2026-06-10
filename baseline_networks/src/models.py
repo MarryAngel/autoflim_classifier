@@ -15,17 +15,16 @@ from torchvision import models
 
 
 # ==================== MODEL REGISTRY ====================
+"""
+Registry of supported neural network architectures.
 
+Each entry contains:
+- model_fn: torchvision model constructor function
+- weights: pre-trained weights from ImageNet1K
+- classifier_layer: tuple of (module_name, layer_index)
+- in_features: input features to the classification layer
+"""
 MODEL_REGISTRY = {
-    """
-    Registry of supported neural network architectures.
-    
-    Each entry contains:
-    - model_fn: torchvision model constructor function
-    - weights: pre-trained weights from ImageNet1K
-    - classifier_layer: tuple of (module_name, layer_index)
-    - in_features: input features to the classification layer
-    """
     'vgg16': {
         'model_fn': models.vgg16,
         'weights': models.VGG16_Weights.IMAGENET1K_V1,
