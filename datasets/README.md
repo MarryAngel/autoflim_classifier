@@ -7,6 +7,7 @@ datasets/
 ├── eggs/              # Egg parasite images
 ├── larvae/            # Larvae parasite images
 ├── cysts/             # Cyst parasite images
+├── datasets_parasites.zip     # Complete dataset with images and masks
 ├── split_dataset.py           # Script for train/test splitting
 ├── split_incremental.py       # Script for incremental data splits
 └── run_splits.sh              # Bash script to run splitting on all datasets
