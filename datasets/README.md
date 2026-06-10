@@ -223,4 +223,3 @@ datasets/
 - Sampling strategies ensure representative train/test distributions
 - Multiple splits enable k-fold cross-validation
 - Incremental percentages help evaluate data efficiency of models
-- 
