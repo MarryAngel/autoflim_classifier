@@ -38,20 +38,9 @@ outputs/
 checkpoints/
 
 # Ignore all images in the datasets folders, except images for example
-baseline_networks/datasets/**/images/*
 flim_metodology/**/build/images/*
 flim_metodology/**/build/masks/*
 flim_metodology/**/build/*
-
-!baseline_networks/datasets/**/images/000001_00000001.png
-!baseline_networks/datasets/**/images/000002_00000001.png
-!baseline_networks/datasets/**/images/000003_00000001.png
-!baseline_networks/datasets/**/images/000004_00000001.png
-!baseline_networks/datasets/**/images/000005_00000001.png
-!baseline_networks/datasets/**/images/000006_00000001.png
-!baseline_networks/datasets/**/images/000007_00000001.png
-!baseline_networks/datasets/**/images/000008_00000001.png
-!baseline_networks/datasets/**/images/000009_00000001.png
 
 !flim_metodology/**/images/000001_00000001.png
 !flim_metodology/**/images/000002_00000001.png
@@ -83,8 +72,8 @@ flim_metodology/**/build/results*
 flim_metodology/**/build/confusion.csv
 
 # Ignore output models
-baseline_networks/notebooks/efficientnet
-baseline_networks/notebooks/efficientnetv2
+baseline_networks/notebooks/efficientnetb0
+baseline_networks/notebooks/efficientnetv2s
 baseline_networks/notebooks/mobilenetv2
 baseline_networks/notebooks/mobilenetv3_small
 baseline_networks/notebooks/resnet18
